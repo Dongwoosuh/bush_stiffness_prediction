@@ -54,11 +54,11 @@ class BushDataset(Dataset):
         return x, y
 
 class VEPDataset():
-    def __init__(self, output_path:str, test_keys:list):
-        self.test_keys = test_keys
+    def __init__(self, output_path:str, test_key:str):
+        self.test_key = test_key
         self.total_data = np.load(output_path, allow_pickle=True).item()
         
-        train_data, test_data = self.get_test_keys(test_keys)
+        train_data, test_data = self.get_test_keys(test_key)
         
         # (2) load_bush_data로 bush_names, inputs, outputs 추출
         _, train_inputs, train_outputs = load_bush_data(train_data)
@@ -87,7 +87,7 @@ class VEPDataset():
         )
         
         self.input_scaler = MinMaxScaler()
-        self.output_scaler = StandardScaler()
+        self.output_scaler = MinMaxScaler()
         
         field_range = 6 * 16 * 16  
     
@@ -113,6 +113,7 @@ class VEPDataset():
         return train_dataset, val_dataset, self.input_scaler, self.output_scaler
     
     def get_test_keys(self, test_keys):
+        test_keys = [test_keys]
         test_data = {key: self.total_data[key] for key in test_keys if key in self.total_data}
         train_data = {key: self.total_data[key] for key in self.total_data if key not in test_keys}
         return train_data, test_data

@@ -35,7 +35,7 @@ class CNN():
         self.input_scaler = None
         self.output_scaler = None
         
-    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_idx:int, save_path:str ):
+    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_key:str, save_path:str ):
         
     
         train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
@@ -47,7 +47,7 @@ class CNN():
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
         
             
-        current_out_path = os.path.join(save_path, f"bush_idx[{test_idx}]")
+        current_out_path = os.path.join(save_path, f"{test_key}")
         os.makedirs(current_out_path, exist_ok=True)
         logger.debug(f"Output path: {current_out_path}")
         

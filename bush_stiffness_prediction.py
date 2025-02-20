@@ -6,6 +6,7 @@ import torch
 import datetime
 import pathlib
 import pandas as pd
+from torch.utils.data import DataLoader
 from copy import deepcopy
 
 import numpy as np
@@ -40,7 +41,7 @@ def train_model(
     n_epochs:int,
     batch_size:int,
     lr:float,
-    test_idx:int,
+    test_key:int,
     save_path: str
     ):
     
@@ -62,14 +63,14 @@ def train_model(
     
     ml_model = build_model(model_type=model_type, **hparams)
 
-    # logger.info(f"LOOCV Iteration: Bush {test_idx} started")
+    logger.info(f"LOOCV Iteration: {test_key}_Bush started")
 
-    ml_model.train(dataset, n_epochs, batch_size, lr, test_idx=0, save_path=save_path)
+    ml_model.train(dataset, n_epochs, batch_size, lr, test_key=test_key, save_path=save_path)
     
 def model_test(
     model_type:str,
     dataset,
-    test_idx:int,
+    test_key:int,
     model_path: str
     ):
     
@@ -88,8 +89,9 @@ def model_test(
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     
-    _, _, test_loader, _, _, _, _ = dataset.get_loader()
+    _, _, test_dataset, _, _, _, _ = dataset.get_datasets()
     
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
     pred_percentages = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     
     result_df = pd.DataFrame(columns=["stiffness_num", "40%", "50%", "60%", "70%", "80%","90%", "100%"])
@@ -123,7 +125,7 @@ def model_test(
         
 if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=3000)
+    parser.add_argument("--n_epochs", type=int, default=10)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--model_type", type=str, default="CNN")
@@ -134,13 +136,13 @@ if __name__ == "__main__" :
     test_set = [0,5,13,18,29,31,70,71] # 몇번 인덱스로 테스트 하실래여?
     # test_set = [0] # 몇번 인덱스로 테스트 하실래여?
     result_path = pathlib.Path("results") / f"{args.model_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    test_keys = ['06_04_NX4']
+    test_keys = ['06_04_NX4', '06_05_NX4']
 
-    dataset = VEPDataset(output_path=data_path, test_keys=test_keys)
-    train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_idx=0, save_path=result_path)
+    for test_key in test_keys:
+        dataset = VEPDataset(output_path=data_path, test_key=test_key)
+        train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     
-    # for test_idx in test_set:
-    #     dataset = BushDataset(batch=args.batch_size, output_path=data_path, gt_path=gt_data_path, field_range=256, num_stiffness=6)
-    #     dataset.update_test_idx(test_idx)
-    #     model_test(args.model_type, dataset=dataset, test_idx=test_idx, model_path=rf'E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\results\MLP_20250218_211141\bush_idx[{test_idx}]')
+    # for test_key in test_key:
+    #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
+    #     model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\results\MLP_20250218_211141\{test_key}]')
