@@ -7,8 +7,9 @@ import json
 
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from tqdm import trange, tqdm
-
+from sklearn.preprocessing import  QuantileTransformer, MinMaxScaler, StandardScaler, RobustScaler, PowerTransformer
 from network.model.model import CNN_small_dropout
 from source import *
 
@@ -32,18 +33,20 @@ class CNN():
         self.model = CNN_small_dropout(num_DV).to(device)
         
         self.input_scaler = None
-        self.output_scalers = None
+        self.output_scaler = None
         
     def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_idx:int, save_path:str ):
         
-        
-        
-        train_loader, val_loader, _, _, output_scalers, input_scaler, _ = dataset.get_loader()
+    
+        train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
 
         self.input_scaler = input_scaler
-        self.output_scalers = output_scalers
+        self.output_scaler = output_scaler
         
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
         
+            
         current_out_path = os.path.join(save_path, f"bush_idx[{test_idx}]")
         os.makedirs(current_out_path, exist_ok=True)
         logger.debug(f"Output path: {current_out_path}")
@@ -127,7 +130,7 @@ class CNN():
     def save(self, path):
         torch.save(self.model.state_dict(), os.path.join(path, "model.pth"))
         torch.save(self.input_scaler, os.path.join(path, "input_scaler.pth"))
-        torch.save(self.output_scalers, os.path.join(path, "output_scalers.pth"))
+        torch.save(self.output_scaler, os.path.join(path, "output_scalers.pth"))
         json.dump(self.hparams, open(os.path.join(path, "hparams.json"), "w"))
         
     @classmethod
@@ -136,7 +139,7 @@ class CNN():
         model = cls(**hparams, device=device)
         model.model.load_state_dict(torch.load(os.path.join(path, "model.pth")))
         model.input_scaler = torch.load(os.path.join(path, "input_scaler.pth"))
-        model.output_scalers = torch.load(os.path.join(path, "output_scalers.pth"))
+        model.output_scaler = torch.load(os.path.join(path, "output_scalers.pth"))
         
         return model
     

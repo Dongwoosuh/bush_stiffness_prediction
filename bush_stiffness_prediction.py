@@ -46,7 +46,7 @@ def train_model(
     
     if model_type == "CNN":
         hparams = {
-            "num_DV" : 12
+            "num_DV" : 11
         }
     elif model_type == "MLP":
         hparams = {
@@ -62,9 +62,9 @@ def train_model(
     
     ml_model = build_model(model_type=model_type, **hparams)
 
-    logger.info(f"LOOCV Iteration: Bush {test_idx} started")
+    # logger.info(f"LOOCV Iteration: Bush {test_idx} started")
 
-    ml_model.train(dataset, n_epochs, batch_size, lr, test_idx, save_path=save_path)
+    ml_model.train(dataset, n_epochs, batch_size, lr, test_idx=0, save_path=save_path)
     
 def model_test(
     model_type:str,
@@ -126,19 +126,18 @@ if __name__ == "__main__" :
     parser.add_argument("--n_epochs", type=int, default=3000)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--model_type", type=str, default="MLP")
+    parser.add_argument("--model_type", type=str, default="CNN")
     args = parser.parse_args()
     
-    data_path = rf'./resource/combined_data_10.npy'
+    data_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_coeff.npy"
     gt_data_path = rf'./resource/combined_data_10.npy'
     test_set = [0,5,13,18,29,31,70,71] # 몇번 인덱스로 테스트 하실래여?
     # test_set = [0] # 몇번 인덱스로 테스트 하실래여?
     result_path = pathlib.Path("results") / f"{args.model_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    test_keys = ['06_04_NX4']
 
-    for test_idx in test_set:
-        dataset = BushDataset(batch=args.batch_size, output_path=data_path, gt_path=gt_data_path, field_range=256, num_stiffness=6)
-        dataset.update_test_idx(test_idx)
-        train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_idx=test_idx, save_path=result_path)
+    dataset = VEPDataset(output_path=data_path, test_keys=test_keys)
+    train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_idx=0, save_path=result_path)
         
     
     # for test_idx in test_set:

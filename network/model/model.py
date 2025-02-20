@@ -73,7 +73,7 @@ class CNN_small_dropout(nn.Module):
 
         # 출력층 수정
         self.conv_last = nn.Sequential(
-            nn.ConvTranspose2d(self.start_ch // 16, 1, kernel_size=3, stride=1, padding=0),  # (batch_size, 1, 32, 32)
+            nn.ConvTranspose2d(self.start_ch // 16, 6, kernel_size=3, stride=1, padding=0),  # (batch_size, 1, 32, 32)
             nn.Sigmoid()
             # nn.ReLU()
 
@@ -85,7 +85,7 @@ class CNN_small_dropout(nn.Module):
         x = x.view(-1, self.start_ch, 2, 2)  # (batch_size, 512, 2, 2)
         x = self.conv5(x)  # (batch_size, 128, 28, 28)
         # x = self.conv_last(x)
-        x = self.conv_last(x).view([-1,16,16])
+        x = self.conv_last(x).view([-1,6,16,16])
         return x
     
     
