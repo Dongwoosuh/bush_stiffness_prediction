@@ -10,14 +10,14 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import trange, tqdm
 from sklearn.preprocessing import  QuantileTransformer, MinMaxScaler, StandardScaler, RobustScaler, PowerTransformer
-from network.model.model import CNN_small_dropout
+from network.model.model import CNN_small_dropout, CNN_linear_stiff
 from source import *
 
-__all__ = ["CNN"]
+__all__ = ["BaseCNN, LSCNN"]
 
 logger = logging.getLogger(__name__)
 
-class CNN():
+class BaseCNN():
     def __init__(
         self,
         device: str,
@@ -143,4 +143,21 @@ class CNN():
         
         return model
     
+class LSCNN(BaseCNN):
+    def __init__(
+        self,
+        device: str,
+        num_DV: int,
+    ):
+        self.device = device
+        
+        self.hparams = {
+            "num_DV": num_DV,
+        }
+        
+        self.model = CNN_linear_stiff(num_DV).to(device)
+        
+        self.input_scaler = None
+        self.output_scaler = None
+        
     

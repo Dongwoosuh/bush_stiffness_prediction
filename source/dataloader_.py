@@ -64,8 +64,16 @@ class VEPDataset():
         _, train_inputs, train_outputs = load_bush_data(train_data)
         _, test_inputs, test_outputs = load_bush_data(test_data)
         
+        # 기하적 최대범위 추가가
+        x_disp, z_disp, theta_x = get_extrapolation_range(train_inputs[:,:8])
+        train_inputs = np.hstack((train_inputs, x_disp.reshape(-1, 1), z_disp.reshape(-1, 1), theta_x.reshape(-1,1))) 
+        
+        train_inputs = np.array([np.asarray(i, dtype=np.float32) for i in train_inputs])
+        train_inputs[:, 8:14] = np.log1p(train_inputs[:, 8:14])
+        
+        
         train_outputs = np.array([np.asarray(o, dtype=np.float32) for o in train_outputs])
-        # train_outputs = np.log1p(train_outputs)
+        train_outputs = np.log1p(train_outputs)
         
         test_outputs = np.array([np.asarray(o, dtype=np.float32) for o in test_outputs])
         test_outputs = np.log1p(test_outputs)
@@ -122,33 +130,34 @@ class VEPDataset():
         
     
 
-# def get_extrapolation_range(df):
+def get_extrapolation_range(df):
 
-#     df = np.array(df, dtype=np.float64)
+    df = np.array(df, dtype=np.float64)
 
-#     scale_factor = 1.0487
-#     # Calculate rubber parameters
-#     D_O_RUBBER = 2 * (df[:, 0] + df[:, 1])
-#     D_I_RUBBER = 2 * df[:, 0]
-#     L_O_RUBBER = 2 * df[:, 2]
-#     L_I_RUBBER = 2 * (df[:, 2] + df[:, 3])
+    scale_factor = 1.0487
+    # Calculate rubber parameters
+    D_O_RUBBER = 2 * (df[:, 0] + df[:, 1])
+    D_I_RUBBER = 2 * df[:, 0]
+    L_O_RUBBER = 2 * df[:, 2]
+    L_I_RUBBER = 2 * (df[:, 2] + df[:, 3])
 
-#     # Calculate displacements and angles
-#     x_disp = (D_O_RUBBER - D_I_RUBBER) / 2 - df[:, 6]
-#     z_disp = (L_I_RUBBER * scale_factor - L_O_RUBBER) / 2
-#     theta_x = (np.arctan(D_O_RUBBER / L_O_RUBBER) - np.arcsin(D_I_RUBBER / np.sqrt(D_O_RUBBER**2 + L_O_RUBBER**2)))
+    # Calculate displacements and angles
+    x_disp = (D_O_RUBBER - D_I_RUBBER) / 2 - df[:, 6]
+    z_disp = (L_I_RUBBER * scale_factor - L_O_RUBBER) / 2
+    theta_x = (np.arctan(D_O_RUBBER / L_O_RUBBER) - np.arcsin(D_I_RUBBER / np.sqrt(D_O_RUBBER**2 + L_O_RUBBER**2)))
 
-#     return x_disp, z_disp, theta_x
+    return x_disp, z_disp, theta_x
 
 if __name__ == "__main__":
     # Test code
-    output_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_coeff.npy"
-    gt_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_coeff.npy"
-    field_range = 0.5
-    num_stiffness = 6
+    output_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
+    gt_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
     batch = 32
-    dataset = VEPDataset(output_path, test_keys=['06_04_NX4'])
-    train_dataset, val_dataset, test_dataset = dataset.get_datasets()
+    test_keys = ['06_04_NX4', '06_05_NX4']
+    for test_key in test_keys:
+        dataset = VEPDataset(output_path=output_path, test_key=test_key)
+        
+        train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
     
-    print(train_dataset[0])
+        print(train_dataset[0])
     

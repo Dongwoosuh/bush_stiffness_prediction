@@ -5,7 +5,7 @@ torch.manual_seed(0)
 
 import pytorch_model_summary
 
-__all__ = ['CNN_small_dropout', 'MLPNN'] 
+__all__ = ['CNN_small_dropout', 'MLPNN', 'CNN_linear_stiff'] 
 class CNN_small_dropout(nn.Module):
 
     def __init__(self,num_DV):
@@ -88,6 +88,136 @@ class CNN_small_dropout(nn.Module):
         x = self.conv_last(x).view([-1,6,16,16])
         return x
     
+class CNN_linear_stiff(nn.Module):
+    def __init__(self, num_DV=17):
+        super(CNN_linear_stiff, self).__init__()
+        BN_momentum = 0.1
+        dropout_rate = 0.1
+
+        self.start_ch = 4096 
+        self.padding_param = 0
+        self.kernel_size = 3
+        self.stride = 2
+        self.embdding_dim =128
+
+        seg1_dim = 8
+        seg2_dim = 6
+        seg3_dim = num_DV - 14
+
+        self.embed1 = nn.Sequential(
+            nn.Linear(seg1_dim, self.embdding_dim),
+            nn.BatchNorm1d(self.embdding_dim, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate)
+        )
+        self.embed2 = nn.Sequential(
+            nn.Linear(seg2_dim, self.embdding_dim),
+            nn.BatchNorm1d(self.embdding_dim, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate)
+        )
+        self.embed3 = nn.Sequential(
+            nn.Linear(seg3_dim, self.embdding_dim),
+            nn.BatchNorm1d(self.embdding_dim, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate)
+            )
+
+        embed_total_dim =  self.embdding_dim * 3
+
+        self.fc = nn.Sequential(
+            nn.Linear(in_features=embed_total_dim, out_features=self.start_ch * 2 * 2),
+            nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate)
+        )
+
+        self.conv5 = nn.Sequential(
+            nn.ConvTranspose2d(self.start_ch, self.start_ch // 2, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 2, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate),
+            nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 2, kernel_size=self.kernel_size, 
+                                 stride=1, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 2, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate),
+            nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
+
+            nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 4, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 4, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate),
+            nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 4, kernel_size=self.kernel_size, 
+                                 stride=1, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 4, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate),
+            nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
+
+            nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 8, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 8, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate),
+            nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 8, kernel_size=self.kernel_size, 
+                                 stride=1, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 8, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate),
+            nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
+
+            nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 16, kernel_size=3, 
+                                 stride=self.stride, padding=0),
+            nn.BatchNorm2d(self.start_ch // 16, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate),
+            nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 16, kernel_size=3, 
+                                 stride=1, padding=0),
+            nn.BatchNorm2d(self.start_ch // 16, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate),
+            nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
+
+            nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 32, kernel_size=3, 
+                                 stride=self.stride, padding=0),
+            nn.BatchNorm2d(self.start_ch // 32, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate),
+            nn.ConvTranspose2d(self.start_ch // 32, self.start_ch // 32, kernel_size=3, 
+                                 stride=1, padding=0),
+            nn.BatchNorm2d(self.start_ch // 32, eps=0.001, momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate),
+            nn.AvgPool2d(3, stride=2, padding=1),
+        )
+
+        self.conv_last = nn.Sequential(
+            nn.ConvTranspose2d(self.start_ch // 32, 6, kernel_size=4, stride=self.stride, padding=1),
+            nn.Flatten(),
+            nn.Linear(in_features=6 * 16 * 16, out_features=6 * 16 * 16),
+        )
+
+    def forward(self, input):
+
+        seg1 = input[:, :8]      
+        seg2 = input[:, 8:14]      
+        seg3 = input[:, 14:]   
+
+        emb1 = self.embed1(seg1)   
+        emb2 = self.embed2(seg2)   
+        emb3 = self.embed3(seg3)
+
+        x_embed = torch.cat([emb1, emb2, emb3], dim=1)  
+
+        # x_embed = emb1 + emb2 + emb3
+        x = self.fc(x_embed)  
+        x = x.view(-1, self.start_ch, 2, 2)
+        x = self.conv5(x)
+        x = self.conv_last(x).view(-1, 6, 16, 16)
+        return x
     
     
 class BaseMLP(nn.Module):

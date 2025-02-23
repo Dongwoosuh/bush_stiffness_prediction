@@ -1,2 +1,2 @@
-from .CNN_small import CNN
+from .CNN import BaseCNN, LSCNN
 from .mlp import MLP

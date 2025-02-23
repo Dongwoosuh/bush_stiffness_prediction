@@ -28,6 +28,8 @@ def build_model(model_type:str, **hparams):
         
     if model_type == "CNN":
         model = CNN(device, **hparams)
+    elif model_type == "CNN_linear_stiff":
+        model = LSCNN(device, **hparams)
     elif model_type == "MLP":
         model = MLP(device, **hparams)
     else:
@@ -49,6 +51,11 @@ def train_model(
         hparams = {
             "num_DV" : 11
         }
+    elif model_type == "CNN_linear_stiff":
+        hparams = {
+            "num_DV" : 17
+        }
+        
     elif model_type == "MLP":
         hparams = {
             "num_DV" : 12,
@@ -128,13 +135,11 @@ if __name__ == "__main__" :
     parser.add_argument("--n_epochs", type=int, default=10)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--model_type", type=str, default="CNN")
+    parser.add_argument("--model_type", type=str, default="CNN_linear_stiff")
     args = parser.parse_args()
     
-    data_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_coeff.npy"
+    data_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
     gt_data_path = rf'./resource/combined_data_10.npy'
-    test_set = [0,5,13,18,29,31,70,71] # 몇번 인덱스로 테스트 하실래여?
-    # test_set = [0] # 몇번 인덱스로 테스트 하실래여?
     result_path = pathlib.Path("results") / f"{args.model_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     test_keys = ['06_04_NX4', '06_05_NX4']
 

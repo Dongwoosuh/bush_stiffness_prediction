@@ -1,1 +1,1 @@
-from .model import CNN_small_dropout, MLPNN
+from .model import CNN_small_dropout, MLPNN, CNN_linear_stiff
