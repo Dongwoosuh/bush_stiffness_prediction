@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import  QuantileTransformer, MinMaxScaler, StandardScaler, RobustScaler, PowerTransformer
 import warnings
 warnings.filterwarnings(action='ignore')
-__all__ = ["Dataset", "VEPDataset"]
+__all__ = ["BushDataset", "VEPDataset"]
 # In[3. Data setting] #############################################################################################
 
 def load_bush_data(total_output_data: dict):
@@ -75,8 +75,13 @@ class VEPDataset():
         train_outputs = np.array([np.asarray(o, dtype=np.float32) for o in train_outputs])
         train_outputs = np.log1p(train_outputs)
         
+        x_disp_, z_disp_, theta_x_ = get_extrapolation_range(test_inputs[:,:8])
+        test_inputs = np.hstack((test_inputs, x_disp_.reshape(-1, 1), z_disp_.reshape(-1, 1), theta_x_.reshape(-1,1)))
+        
+        test_inputs = np.array([np.asarray(i, dtype=np.float32) for i in test_inputs])
+        test_inputs[:, 8:14] = np.log1p(test_inputs[:, 8:14])
         test_outputs = np.array([np.asarray(o, dtype=np.float32) for o in test_outputs])
-        test_outputs = np.log1p(test_outputs)
+        # test_outputs = np.log1p(test_outputs)
         
         
         # Placeholders for dynamic updates
@@ -94,8 +99,8 @@ class VEPDataset():
             self.np_train_input, self.np_train_output, test_size=0.1, random_state=2025
         )
         
-        self.input_scaler = MinMaxScaler()
-        self.output_scaler = MinMaxScaler()
+        self.input_scaler = StandardScaler()
+        self.output_scaler = StandardScaler()
         
         field_range = 6 * 16 * 16  
     
@@ -125,6 +130,40 @@ class VEPDataset():
         test_data = {key: self.total_data[key] for key in test_keys if key in self.total_data}
         train_data = {key: self.total_data[key] for key in self.total_data if key not in test_keys}
         return train_data, test_data
+    
+class InferenceVEPDataset():
+    def __init__(self, output_path:str, test_key:str):
+        self.test_key = test_key
+        self.total_data = np.load(output_path, allow_pickle=True).item()
+        
+        train_data, test_data = self.get_test_keys(test_key)
+        
+        # (2) load_bush_data로 bush_names, inputs, outputs 추출
+        _, train_inputs, train_outputs = load_bush_data(train_data)
+        _, test_inputs, test_outputs = load_bush_data(test_data)
+        
+        # 기하적 최대범위 추가가
+        x_disp, z_disp, theta_x = get_extrapolation_range(train_inputs[:,:8])
+        train_inputs = np.hstack((train_inputs, x_disp.reshape(-1, 1), z_disp.reshape(-1, 1), theta_x.reshape(-1,1))) 
+        
+        train_inputs = np.array([np.asarray(i, dtype=np.float32) for i in train_inputs])
+        train_inputs[:, 8:14] = np.log1p(train_inputs[:, 8:14])
+        
+        
+        train_outputs = np.array([np.asarray(o, dtype=np.float32) for o in train_outputs])
+        train_outputs = np.log1p(train_outputs)
+        
+        test_outputs = np.array([np.asarray(o, dtype=np.float32) for o in test_outputs])
+        test_outputs = np.log1p(test_outputs)
+        
+        
+        # Placeholders for dynamic updates
+        self.np_train_input = train_inputs
+        self.np_train_output = train_outputs
+        self.np_test_input = test_inputs
+        self.np_test_output = test_outputs
+        self.input_scaler = None
+        self.output_scaler = None
 
 
         

@@ -13,8 +13,8 @@ def results_extraction(input_data_unscaled, prediction, gt_output, pred_percenta
 
     train_X = np.column_stack([grid_x.ravel(), grid_y.ravel()])
 
-    optimal_degree = loocv_optimization(train_X, prediction[0,:,:].flatten())
-    poly_model, poly = polynomial_regression(train_X, prediction[0,:,:].flatten(), optimal_degree)
+    optimal_degree = loocv_optimization(train_X, prediction[:,:].flatten())
+    poly_model, poly = polynomial_regression(train_X, prediction[:,:].flatten(), optimal_degree)
 
     Z_pred = predict_on_grid(poly_model, poly, train_X)
     Z_pred = Z_pred.reshape(16, 16)

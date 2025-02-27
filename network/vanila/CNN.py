@@ -56,7 +56,7 @@ class BaseCNN():
         csv_logger.writerow(["epoch", "train_loss", "val_loss"])
         logger.debug(f"CSV logger path: {csv_logger_path}")        
         
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
+        optimizer = torch.optim.NAdam(self.model.parameters(), lr=lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=94, T_mult=1, eta_min=0, verbose=False)
         criterion = nn.MSELoss()
         
@@ -119,9 +119,9 @@ class BaseCNN():
             outputs = self.forward(inputs)
             outputs = outputs.detach().cpu().numpy()
             
-            outputs_flat = outputs.reshape(-1, 256)
-            output_scaler = self.output_scalers[int(input_unscaled[:, -3])-1]
-            outputs_flat = output_scaler.inverse_transform(outputs_flat)
+            outputs_flat = outputs.reshape(-1, 6*16*16)
+            # output_scaler = self.output_scaler[int(input_unscaled[:, -3])-1]
+            outputs_flat = self.output_scaler.inverse_transform(outputs_flat)
             
             outputs = outputs_flat.reshape(outputs.shape)
         

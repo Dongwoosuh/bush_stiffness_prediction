@@ -91,12 +91,21 @@ def model_test(
         
     if model_type == "CNN":
         model = CNN.load(model_path, device)
+    elif model_type == "CNN_linear_stiff":
+        model = LSCNN.load(model_path, device)
     elif model_type == "MLP":
         model = MLP.load(model_path, device)
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     
-    _, _, test_dataset, _, _, _, _ = dataset.get_datasets()
+    input_scaler = model.input_scaler
+    output_scaler = model.output_scaler
+    
+    test_inputs = dataset.np_test_input
+    test_inputs = input_scaler.transform(test_inputs)
+    test_outputs = dataset.np_test_output
+    
+    test_dataset = BushDataset(test_inputs, test_outputs)
     
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
     pred_percentages = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
@@ -104,27 +113,31 @@ def model_test(
     result_df = pd.DataFrame(columns=["stiffness_num", "40%", "50%", "60%", "70%", "80%","90%", "100%"])
     for idx, (inputs, outputs) in enumerate(test_loader):
         prediction = model.predict(inputs) # input은 스케일이 이미 된 상태로 들어옴
-        prediction = prediction 
-        gt_output = outputs.numpy() # output은 굳이 스케일링해서 넣을 필요 없음
+        prediction = np.expm1(prediction.reshape(-1,16,16))
+        
+        gt_output = outputs.numpy().reshape(-1,16,16) # output은 굳이 스케일링해서 넣을 필요 없음
+        # gt_output = np.expm1(gt_output)
         
         input_unscaled = model.input_scaler.inverse_transform(inputs.numpy())
         
-        save_path = os.path.join(model_path, f'stiffness_{idx+1}')
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+        for idx_ in range(len(gt_output)):
+            
+            save_path = os.path.join(model_path, f'stiffness_{idx_+1}')
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            
+            wmape_per_percent_list, wmape_full_range_list = results_extraction(input_unscaled, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
+            
+            new_row = pd.DataFrame({"stiffness_num": idx_+1, "40%": wmape_per_percent_list[0], "50%": wmape_per_percent_list[1], "60%": wmape_per_percent_list[2],
+                                    "70%": wmape_per_percent_list[3], "80%": wmape_per_percent_list[4], "90%": wmape_per_percent_list[5], "100%": wmape_full_range_list[0]}, index=[0])
+            
+            result_df = pd.concat([result_df, new_row], ignore_index=True) 
+            
+        mean_row = pd.DataFrame({"stiffness_num": "Mean", "40%": result_df["40%"].mean(), "50%": result_df["50%"].mean(), "60%": result_df["60%"].mean(),
+                                "70%": result_df["70%"].mean(), "80%": result_df["80%"].mean(), "90%": result_df["90%"].mean(), "100%": result_df["100%"].mean()}, index=[0])   
+        result_df = pd.concat([result_df, mean_row], ignore_index=True)
         
-        wmape_per_percent_list, wmape_full_range_list = results_extraction(input_unscaled, prediction, gt_output, pred_percentages=pred_percentages, save_path=save_path)
-        
-        new_row = pd.DataFrame({"stiffness_num": idx+1, "40%": wmape_per_percent_list[0], "50%": wmape_per_percent_list[1], "60%": wmape_per_percent_list[2],
-                                "70%": wmape_per_percent_list[3], "80%": wmape_per_percent_list[4], "90%": wmape_per_percent_list[5], "100%": wmape_full_range_list[0]}, index=[0])
-        
-        result_df = pd.concat([result_df, new_row], ignore_index=True) 
-        
-    mean_row = pd.DataFrame({"stiffness_num": "Mean", "40%": result_df["40%"].mean(), "50%": result_df["50%"].mean(), "60%": result_df["60%"].mean(),
-                             "70%": result_df["70%"].mean(), "80%": result_df["80%"].mean(), "90%": result_df["90%"].mean(), "100%": result_df["100%"].mean()}, index=[0])   
-    result_df = pd.concat([result_df, mean_row], ignore_index=True)
-    
-    result_df.to_csv(os.path.join(model_path, "result.csv"), index=False)    
+        result_df.to_csv(os.path.join(model_path, "result.csv"), index=False)    
         
      
         
@@ -132,7 +145,7 @@ def model_test(
         
 if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=10)
+    parser.add_argument("--n_epochs", type=int, default=2000)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--model_type", type=str, default="CNN_linear_stiff")
@@ -141,13 +154,19 @@ if __name__ == "__main__" :
     data_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
     gt_data_path = rf'./resource/combined_data_10.npy'
     result_path = pathlib.Path("results") / f"{args.model_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    test_keys = ['06_04_NX4', '06_05_NX4']
+    test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
+                'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+                '06_11_MQ4', 'B_02', 'B_05']
+    # test_keys = [
+    #             'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+    #             '06_11_MQ4', 'B_02', 'B_05']
+    test_keys = ['G_13_04_IK']
 
-    for test_key in test_keys:
-        dataset = VEPDataset(output_path=data_path, test_key=test_key)
-        train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
+    # for test_key in test_keys:
+    #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
+    #     train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     
-    # for test_key in test_key:
-    #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
-    #     model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\results\MLP_20250218_211141\{test_key}]')
+    for test_key in test_keys:
+        dataset = VEPDataset(output_path=data_path, test_key=test_key)
+        model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\results\CNN_linear_stiff_20250223_213635\{test_key}')
