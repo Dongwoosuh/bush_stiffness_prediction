@@ -7,63 +7,64 @@ import json
 
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
 from tqdm import trange, tqdm
-
-from network.model.basic_model import MLPNN
+from network.model.transformer_model import TransformerPredictor
 from source import *
 
-__all__ = ["MLP"]
+__all__ = ["BaseTransformer"]
 
 logger = logging.getLogger(__name__)
 
-class MLP():
+class BaseTransformer():
     def __init__(
         self,
         device: str,
         num_DV: int,
-        hidden_features: int,
+        embed_dim: int,
+        num_heads: int,
         num_layers: int,
-        drop_out: float,
-        hidden_activation: str,
+        output_dim: int,
+        dropout: float
     ):
+        
         self.device = device
         
         self.hparams = {
             "num_DV": num_DV,
-            "hidden_features": hidden_features,
+            "embed_dim": embed_dim,
+            "num_heads": num_heads,
             "num_layers": num_layers,
-            "drop_out": drop_out,
-            "hidden_activation": hidden_activation,
+            "output_dim": output_dim,
+            "dropout": dropout,
+            
         }
         
-        self.model = MLPNN(
-            input_size=num_DV,
-            node_num=hidden_features,
-            output_size=256,
-            num_layers=num_layers,
-            hidden_activation= hidden_activation,
-            output_activation="None",
-            dropout_rate=drop_out,
-        ).to(device)
+        self.model = TransformerPredictor(num_DV, embed_dim, num_heads, num_layers, output_dim, dropout).to(device)
         
         self.input_scaler = None
-        self.output_scalers = None
+        self.output_scaler = None
         
-    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_idx:int, save_path:str ):
+    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_key:str, save_path:str ):
         
-        train_loader, val_loader, _, _, output_scalers, input_scaler, _ = dataset.get_loader()
-        
+    
+        train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
+
         self.input_scaler = input_scaler
-        self.output_scalers = output_scalers
+        self.output_scaler = output_scaler
         
-        current_out_path = os.path.join(save_path, f"bush_idx[{test_idx}]")
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
+        
+            
+        current_out_path = os.path.join(save_path, f"{test_key}")
         os.makedirs(current_out_path, exist_ok=True)
         logger.debug(f"Output path: {current_out_path}")
         
         csv_logger_path = os.path.join(current_out_path, "loss.csv")
         csv_logger = csv.writer(open(csv_logger_path, "w", newline=""))
         csv_logger.writerow(["epoch", "train_loss", "val_loss"])
-        logger.debug(f"CSV logger path: {csv_logger_path}")
+        logger.debug(f"CSV logger path: {csv_logger_path}")        
         
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=94, T_mult=1, eta_min=0, verbose=False)
@@ -77,11 +78,10 @@ class MLP():
             self.model.train()
             total_train_loss = 0.0
             
-            for inputs, targets in tqdm(train_loader, desc="Epoch", leave=False):
-                
+            for inputs, targets in tqdm(train_loader, desc="Batch", leave=False):
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
-                targets = targets.view(-1, 256)
-                predictions = self.forward(inputs)
+                
+                predictions= self.forward(inputs)
                 loss = criterion(predictions, targets)
                 loss.backward()
                 
@@ -93,17 +93,16 @@ class MLP():
             total_train_loss = total_train_loss / len(train_loader)
             
             self.model.eval()
-            
             with torch.no_grad():
                 total_val_loss = 0.0
-                
                 for inputs, targets in val_loader:
                     inputs, targets = inputs.to(self.device), targets.to(self.device)
-                    targets = targets.view(-1, 256)
+                    
                     predictions = self.forward(inputs)
                     val_loss = criterion(predictions, targets)
-                    total_val_loss += val_loss.item()
                     
+                    total_val_loss += val_loss.item()
+                
                 total_val_loss = total_val_loss / len(val_loader)
                 epoch_progress.set_postfix({"average loss": total_val_loss})
                 
@@ -112,35 +111,36 @@ class MLP():
                     
                     self.save(current_out_path)
                     logger.debug(f"Best model updated: {best_val_loss}, updated model saved in {current_out_path}")
-                    
-                scheduler.step()
-                
-            csv_logger.writerow([epoch, total_train_loss, total_val_loss])
-                
-        
 
-    def forward(self, X):
-        outputs = self.model(X)
+                scheduler.step()
+
+            csv_logger.writerow([epoch, total_train_loss, total_val_loss])
+            
+
+    def forward(self, inputs):
+        outputs = self.model(inputs)
         return outputs
     
     def predict(self, inputs):
         self.model.eval()
         with torch.no_grad():
-            inputs_unscaled = self.input_scaler.inverse_transform(inputs)
-            inputs = inputs.to(self.device)            
+            input_unscaled = self.input_scaler.inverse_transform(inputs)
+            inputs = inputs.to(self.device)
             outputs = self.forward(inputs)
             outputs = outputs.detach().cpu().numpy()
             
-            output_scaler = self.output_scalers[int(inputs_unscaled[:, -3])-1]
-            outputs = output_scaler.inverse_transform(outputs)
+            outputs_flat = outputs.reshape(-1, 6*16*16)
+            # output_scaler = self.output_scaler[int(input_unscaled[:, -3])-1]
+            outputs_flat = self.output_scaler.inverse_transform(outputs_flat)
             
-            outputs = outputs.reshape(-1,16,16)
+            outputs = outputs_flat.reshape(outputs.shape)
+        
         return outputs
-    
+            
     def save(self, path):
         torch.save(self.model.state_dict(), os.path.join(path, "model.pth"))
         torch.save(self.input_scaler, os.path.join(path, "input_scaler.pth"))
-        torch.save(self.output_scalers, os.path.join(path, "output_scalers.pth"))
+        torch.save(self.output_scaler, os.path.join(path, "output_scalers.pth"))
         json.dump(self.hparams, open(os.path.join(path, "hparams.json"), "w"))
         
     @classmethod
@@ -149,6 +149,25 @@ class MLP():
         model = cls(**hparams, device=device)
         model.model.load_state_dict(torch.load(os.path.join(path, "model.pth")))
         model.input_scaler = torch.load(os.path.join(path, "input_scaler.pth"))
-        model.output_scalers = torch.load(os.path.join(path, "output_scalers.pth"))
+        model.output_scaler = torch.load(os.path.join(path, "output_scalers.pth"))
         
         return model
+    
+# class LSCNN(BaseCNN):
+#     def __init__(
+#         self,
+#         device: str,
+#         num_DV: int,
+#     ):
+#         self.device = device
+        
+#         self.hparams = {
+#             "num_DV": num_DV,
+#         }
+        
+#         self.model = CNN_linear_stiff(num_DV).to(device)
+        
+#         self.input_scaler = None
+#         self.output_scaler = None
+        
+    

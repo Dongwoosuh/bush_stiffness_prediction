@@ -28,8 +28,13 @@ def build_model(model_type:str, **hparams):
         
     if model_type == "CNN":
         model = CNN(device, **hparams)
+        
     elif model_type == "CNN_linear_stiff":
         model = LSCNN(device, **hparams)
+        
+    elif model_type == "Transformer":
+        model = BaseTransformer(device, **hparams)
+        
     elif model_type == "MLP":
         model = MLP(device, **hparams)
     else:
@@ -54,6 +59,16 @@ def train_model(
     elif model_type == "CNN_linear_stiff":
         hparams = {
             "num_DV" : 17
+        }
+        
+    elif model_type == "Transformer":
+        hparams = {
+            "num_DV" : 17,
+            "embed_dim" : 128,
+            "num_heads" : 4,
+            "num_layers" : 2,
+            "output_dim" : 256,
+            "dropout" : 0.1
         }
         
     elif model_type == "MLP":
@@ -91,8 +106,13 @@ def model_test(
         
     if model_type == "CNN":
         model = CNN.load(model_path, device)
+        
     elif model_type == "CNN_linear_stiff":
         model = LSCNN.load(model_path, device)
+        
+    elif model_type == "Transformer":
+        model = BaseTransformer.load(model_path, device)
+        
     elif model_type == "MLP":
         model = MLP.load(model_path, device)
     else:
@@ -147,11 +167,11 @@ if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=2000)
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--model_type", type=str, default="CNN_linear_stiff")
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--model_type", type=str, default="Transformer")
     args = parser.parse_args()
     
-    data_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
+    data_path = r".\resource\combined_data_16_106_70per_energy_linear.npy"
     gt_data_path = rf'./resource/combined_data_10.npy'
     result_path = pathlib.Path("results") / f"{args.model_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
@@ -162,11 +182,11 @@ if __name__ == "__main__" :
     #             '06_11_MQ4', 'B_02', 'B_05']
     test_keys = ['G_13_04_IK']
 
-    # for test_key in test_keys:
-    #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
-    #     train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
-        
-    
     for test_key in test_keys:
         dataset = VEPDataset(output_path=data_path, test_key=test_key)
-        model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\results\CNN_linear_stiff_20250223_213635\{test_key}')
+        train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
+        
+    
+    # for test_key in test_keys:
+    #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
+    #     model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'.\results\Transformer_20250301_010702\{test_key}')

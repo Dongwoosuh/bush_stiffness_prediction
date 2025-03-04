@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import trange, tqdm
 from sklearn.preprocessing import  QuantileTransformer, MinMaxScaler, StandardScaler, RobustScaler, PowerTransformer
-from network.model.model import CNN_small_dropout, CNN_linear_stiff
+from network.model.basic_model import CNN_small_dropout, CNN_linear_stiff
 from source import *
 
 __all__ = ["BaseCNN, LSCNN"]

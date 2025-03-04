@@ -4,205 +4,173 @@ import ast
 import pandas as pd
 from torch.utils.data import DataLoader, Dataset
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import  QuantileTransformer
-# from network.CNN import build
+from sklearn.preprocessing import  QuantileTransformer, MinMaxScaler, StandardScaler, RobustScaler, PowerTransformer
 import warnings
 warnings.filterwarnings(action='ignore')
-
-__all__ = ["LogScaler", "Dataset", "BushDataset"]
+__all__ = ["BushDataset", "VEPDataset"]
 # In[3. Data setting] #############################################################################################
 
-class LogScaler:
-    def fit(self, X, y=None):
-        self.min_ = np.min(X, axis=0)
-        return self
-
-    def transform(self, X):
-        return np.log1p(X - self.min_)
-
-    def inverse_transform(self, X):
-        return np.expm1(X) + self.min_
+def load_bush_data(total_output_data: dict):
+    """
+    부시별 input/output 딕셔너리를 
+    (bush_names, inputs, outputs) 형태로 반환
+    """
+    bush_names = list(total_output_data.keys())  # 예: ["06_04_NX4", "06_05_NX4", ...]
     
-class Dataset(Dataset):
-    def __init__(self, input_dataset, output_dataset):
-        super(Dataset, self).__init__()
+    # 부시별로 input/output을 하나의 리스트에 쌓기
+    all_inputs = []
+    all_outputs = []
+    for name in bush_names:
+        sub_dict = total_output_data[name]
+        # 'input'과 'output'이 존재한다고 가정
+        bush_input = sub_dict["input"]   # shape 예: (feature_dim,)
+        bush_output = sub_dict["output"] # shape 예: (6,16,16) or (16,16) 등
+        all_inputs.append(bush_input)
+        all_outputs.append(bush_output)
 
-        self.inputs = input_dataset
-        self.outputs = output_dataset
+    # 리스트를 numpy 배열로 변환
+    # (주의) output이 shape이 제각각이면 object dtype으로 변환될 수 있음
+    all_inputs = np.array(all_inputs, dtype=np.float32)
+    all_outputs = np.array(all_outputs, dtype=np.float32)
 
+    return bush_names, all_inputs, all_outputs
+
+class BushDataset(Dataset):
+    """
+    부시별 input, output을 Dataset으로 감싸는 예시
+    """
+    def __init__(self, inputs, outputs):
+        super().__init__()
+        self.inputs = inputs  # shape: (N, feature_dim) 또는 object
+        self.outputs = outputs
+        
     def __len__(self):
         return len(self.inputs)
 
     def __getitem__(self, idx):
-        x = torch.from_numpy(self.inputs[idx]).float()
-        y = torch.from_numpy(self.outputs[idx]).float()
+        x = self.inputs[idx]
+        y = self.outputs[idx]
 
         return x, y
 
-class BushDataset():
-    def __init__(self, batch, output_path, gt_path, field_range, num_stiffness):
-        self.batch = batch
-        self.test_idx = 0  # Default value
-        self.field_range = field_range
-        self.num_stiff = num_stiffness
+class VEPDataset():
+    def __init__(self, output_path:str, test_key:str):
+        self.test_key = test_key
+        self.total_data = np.load(output_path, allow_pickle=True).item()
         
-        # output_path = r"D:\hyundai_bush_2nd\2D_predict_CNN\2D_prediction\2D_prediction\MLP_extrapolation\output\combined_data.npy"
-        output_path = output_path
-    
-        total_output_data = np.load(output_path, allow_pickle=True).item()
-        total_output_data_gt = np.load(gt_path, allow_pickle=True).item() 
+        train_data, test_data = self.get_test_keys(test_key)
         
-        self.original_input = total_output_data["inputs"]  # 원본 데이터를 유지
-        self.original_output = total_output_data["outputs"]
-        self.bush_names = total_output_data.get("bush_names", None)
+        # (2) load_bush_data로 bush_names, inputs, outputs 추출
+        _, train_inputs, train_outputs = load_bush_data(train_data)
+        _, test_inputs, test_outputs = load_bush_data(test_data)
         
-        self.original_input_gt = total_output_data_gt["inputs"]  # 원본 데이터를 유지
-        self.original_output_gt = total_output_data_gt["outputs"]
-        self.bush_names_gt = total_output_data_gt.get("bush_names", None)
+        # 기하적 최대범위 추가가
+        x_disp, z_disp, theta_x = get_extrapolation_range(train_inputs[:,:8])
+        train_inputs = np.hstack((train_inputs, x_disp.reshape(-1, 1), z_disp.reshape(-1, 1), theta_x.reshape(-1,1))) 
         
-
-        if self.bush_names is not None:
-            self.bush_indices = {name: np.where(self.bush_names == name)[0] for name in np.unique(self.bush_names)}
-        else:
-            self.bush_indices = None
-            
-        if self.bush_names_gt is not None:
-            self.bush_indices_gt = {name: np.where(self.bush_names_gt == name)[0] for name in np.unique(self.bush_names_gt)}
-        else:
-            self.bush_indices_gt = None
-            
-        bush_numbers = np.array([int(name.split('_')[-2]) for name in self.bush_names])
-        bush_numbers_gt = np.array([int(name.split('_')[-1][-1]) for name in self.bush_names_gt])
-        # bush_numbers = np.array([int(name.split('_')[-1][-1]) for name in self.bush_names_gt])
-        # valid_indices = bush_numbers == 1
-        # valid_indices = (bush_numbers == 1)| (bush_numbers == 2) | (bush_numbers == 4) |  (bush_numbers == 5)
-        # valid_indices = (bush_numbers == 4) | (bush_numbers == 5)
-        valid_indices = (bush_numbers == 1) | (bush_numbers == 2) | (bush_numbers == 3) | (bush_numbers == 4) | (bush_numbers == 5) | (bush_numbers == 6)
+        train_inputs = np.array([np.asarray(i, dtype=np.float32) for i in train_inputs])
+        train_inputs[:, 8:14] = np.log1p(train_inputs[:, 8:14])
         
-        self.original_input = self.original_input[valid_indices]
-        self.original_output = self.original_output[valid_indices]
-        bush_numbers = bush_numbers[valid_indices]
         
-        self.original_output_gt = self.original_output_gt[valid_indices]
+        train_outputs = np.array([np.asarray(o, dtype=np.float32) for o in train_outputs])
+        train_outputs = np.log1p(train_outputs)
         
-
-        # Append bush numbers to inputs
-        self.original_input = np.hstack((self.original_input, bush_numbers.reshape(-1, 1)))
-
-        subAxes, mainAxes = get_extrapolation_range(self.original_input[:,-1], self.original_input[:,:8])
-
-        self.original_input = np.hstack((self.original_input, subAxes.reshape(-1, 1), mainAxes.reshape(-1, 1)))
-        self.original_input[:,8] = np.log1p(self.original_input[:,8])  ## log scale로 변환 선형강성값
-
+        x_disp_, z_disp_, theta_x_ = get_extrapolation_range(test_inputs[:,:8])
+        test_inputs = np.hstack((test_inputs, x_disp_.reshape(-1, 1), z_disp_.reshape(-1, 1), theta_x_.reshape(-1,1)))
+        
+        test_inputs = np.array([np.asarray(i, dtype=np.float32) for i in test_inputs])
+        test_inputs[:, 8:14] = np.log1p(test_inputs[:, 8:14])
+        test_outputs = np.array([np.asarray(o, dtype=np.float32) for o in test_outputs])
+        # test_outputs = np.log1p(test_outputs)
+        
+        
         # Placeholders for dynamic updates
-        self.np_train_input = self.original_input.copy()
-        self.np_train_output = self.original_output.copy()
-        self.np_test_input = None
-        self.np_test_output = None
-        self.inp_minmax = None
-
-    def update_test_idx(self, idx):
-        self.test_idx = idx
-        self.input_scalers = QuantileTransformer()
-        self.output_scalers = [QuantileTransformer() for _ in range(6)]
-
-        def scale_output_data(data, scaler):
-            reshaped = data.reshape(-1, self.field_range)
-            scaled = scaler.transform(reshaped)
-            return scaled.reshape(data.shape)
+        self.np_train_input = train_inputs
+        self.np_train_output = train_outputs
+        self.np_test_input = test_inputs
+        self.np_test_output = test_outputs
+        self.input_scaler = None
+        self.output_scaler = None
         
-        # Split train and test data dynamically from the original data
-        self.np_test_input = self.original_input[self.test_idx*self.num_stiff:(self.test_idx + 1)*self.num_stiff]
-        self.np_test_output = self.original_output[self.test_idx*self.num_stiff:(self.test_idx + 1)*self.num_stiff]
-        self.np_test_output_gt = self.original_output_gt[self.test_idx*self.num_stiff:(self.test_idx + 1)*self.num_stiff]
-
-        mask = np.ones(self.original_input.shape[0], dtype=bool)
-        mask[self.test_idx*self.num_stiff:(self.test_idx + 1)*self.num_stiff] = False  # Exclude test data
-        self.np_train_input = self.original_input[mask]
-        self.np_train_output = self.original_output[mask]
-
-        for i in range(6):
-            mask = self.np_train_input[:, 9] == (i + 1)
-            reshaped_output = self.np_train_output[mask].reshape(-1, self.field_range)
-            if reshaped_output.shape[0] == 0:
-                continue
-            self.output_scalers[i].fit(reshaped_output)
-            self.np_train_output[mask] = scale_output_data(self.np_train_output[mask], self.output_scalers[i])
-
-    def get_loader(self):
+    def get_datasets(self):
         
         # Split train data into train and validation sets
         train_input, val_input, train_output, val_output = train_test_split(
             self.np_train_input, self.np_train_output, test_size=0.1, random_state=2025
         )
-
-        # Scale train, validation, and test inputs
-        scaled_train_input = self.input_scalers.fit_transform(train_input)
-        scaled_val_input = self.input_scalers.transform(val_input)
-        scaled_test_input = self.input_scalers.transform(self.np_test_input)
-
+        
+        self.input_scaler = StandardScaler()
+        self.output_scaler = StandardScaler()
+        
+        field_range = 6 * 16 * 16  
+    
+        train_output = train_output.reshape(-1, field_range)
+        val_output = val_output.reshape(-1, field_range)
+        
+        train_input = self.input_scaler.fit_transform(train_input)
+        val_input = self.input_scaler.transform(val_input)
+        train_output = self.output_scaler.fit_transform(train_output)
+        val_output = self.output_scaler.transform(val_output)
+        
+        train_output = train_output.reshape(-1, 6, 16, 16)
+        val_output = val_output.reshape(-1, 6, 16, 16)
         # Create datasets and data loaders
-        train_dataset = Dataset(scaled_train_input, train_output)
-        val_dataset = Dataset(scaled_val_input, val_output)
-        test_dataset = Dataset(scaled_test_input, self.np_test_output)
+        train_dataset = BushDataset(train_input, train_output)
+        val_dataset = BushDataset(val_input, val_output)
+        # test_dataset = BushDataset(self.np_test_input, self.np_test_output)
 
-        train_loader = DataLoader(train_dataset, batch_size=self.batch, shuffle=True, drop_last=False)
-        val_loader = DataLoader(val_dataset, batch_size=self.batch, shuffle=True, drop_last=False)
-        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)  # Single sample for LOOCV
+        # train_loader = DataLoader(train_dataset, batch_size=self.batch, shuffle=True, drop_last=False)
+        # val_loader = DataLoader(val_dataset, batch_size=self.batch, shuffle=True, drop_last=False)
+        # test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)  # Single sample for LOOCV
 
-        return train_loader, val_loader, test_loader, self.np_test_output_gt, self.output_scalers, self.input_scalers, self.field_range
+        return train_dataset, val_dataset, self.input_scaler, self.output_scaler
     
+    def get_test_keys(self, test_keys):
+        test_keys = [test_keys]
+        test_data = {key: self.total_data[key] for key in test_keys if key in self.total_data}
+        train_data = {key: self.total_data[key] for key in self.total_data if key not in test_keys}
+        return train_data, test_data
     
-class VEPDataset_inference():
-    def __init__(self, input_path="./resource/inference/input_data.xlsx", field_range=256, num_stiffness=6):
-        self.input_path = input_path
-        # 엑셀 파일 불러오기 (경로 수정 필요)
-        df = pd.read_excel(input_path, dtype=str)  # 모든 데이터를 문자열로 로드
-        df["predictions"] = df["predictions"].apply(lambda x: np.array(ast.literal_eval(x), dtype=np.float32))
-        df.iloc[:, 3] = df.iloc[:, 3].apply(lambda x: np.array(ast.literal_eval(x), dtype=np.float32))
-        df.iloc[:, 4] = df.iloc[:, 4].apply(lambda x: np.array(ast.literal_eval(x), dtype=np.int32))
+class InferenceVEPDataset():
+    def __init__(self, output_path:str, test_key:str):
+        self.test_key = test_key
+        self.total_data = np.load(output_path, allow_pickle=True).item()
         
-        input_data_all = []        
-        for idx in range(len(df)):
-            
-            linear_stiffness = df.iloc[idx, 3]  # (6,)
-            bush_number = df.iloc[idx, 4]  # (6,)
-            self.input_data = df.loc[idx, "predictions"]  # (8,)
-            
-            expanded_data = np.zeros((6, 10))         
-            
-            for i in range(6):
-                expanded_data[i, :8] = self.input_data  # 8개 데이터 동일하게 복사
-                expanded_data[i, 8] = linear_stiffness[i]  # 9번째 열에 값 추가
-                expanded_data[i, 9] = bush_number[i]  # 10번째 열에 값 추가
-            
-            expanded_data[:,8] = np.log1p(expanded_data[:,8])  ## log scale로 변환 선형강성값
-            
-            subAxes, mainAxes = get_extrapolation_range(expanded_data[:,-1], expanded_data[:,:8])
-            expanded_data = np.hstack((expanded_data, subAxes.reshape(-1, 1), mainAxes.reshape(-1, 1)))        
-            input_data_all.append(expanded_data)
-            
-        self.input_data = np.vstack(input_data_all)
-        print(self.input_data.shape)
+        train_data, test_data = self.get_test_keys(test_key)
+        
+        # (2) load_bush_data로 bush_names, inputs, outputs 추출
+        _, train_inputs, train_outputs = load_bush_data(train_data)
+        _, test_inputs, test_outputs = load_bush_data(test_data)
+        
+        # 기하적 최대범위 추가가
+        x_disp, z_disp, theta_x = get_extrapolation_range(train_inputs[:,:8])
+        train_inputs = np.hstack((train_inputs, x_disp.reshape(-1, 1), z_disp.reshape(-1, 1), theta_x.reshape(-1,1))) 
+        
+        train_inputs = np.array([np.asarray(i, dtype=np.float32) for i in train_inputs])
+        train_inputs[:, 8:14] = np.log1p(train_inputs[:, 8:14])
+        
+        
+        train_outputs = np.array([np.asarray(o, dtype=np.float32) for o in train_outputs])
+        train_outputs = np.log1p(train_outputs)
+        
+        test_outputs = np.array([np.asarray(o, dtype=np.float32) for o in test_outputs])
+        test_outputs = np.log1p(test_outputs)
+        
+        
+        # Placeholders for dynamic updates
+        self.np_train_input = train_inputs
+        self.np_train_output = train_outputs
+        self.np_test_input = test_inputs
+        self.np_test_output = test_outputs
+        self.input_scaler = None
+        self.output_scaler = None
 
-    def get_loader(self, input_scaler):
-        
-        scaled_input = input_scaler.transform(self.input_data)
-        # scaled_tensor = torch.tensor(scaled_input, dtype=torch.float32)
-        
-        dataset = Dataset(scaled_input, np.zeros((scaled_input.shape[0], 256)))
-        # for i in range(1, num_stiffness+1):
-        return DataLoader(dataset, batch_size=1, shuffle=False)
-        
-    
-# In[4. LOOCV WMAPE Calculation] ############################################################################################
 
-# def inverse_scale_data(data, scaler):
-#     reshaped = data.reshape(-1, field_range)
-#     inversed = scaler.inverse_transform(reshaped)
-#     return inversed.reshape(data.shape)
+        
 
-def get_extrapolation_range(stiffness_value_to_train, df):
+def get_extrapolation_range(df):
+
+    df = np.array(df, dtype=np.float64)
 
     scale_factor = 1.0487
     # Calculate rubber parameters
@@ -216,25 +184,18 @@ def get_extrapolation_range(stiffness_value_to_train, df):
     z_disp = (L_I_RUBBER * scale_factor - L_O_RUBBER) / 2
     theta_x = (np.arctan(D_O_RUBBER / L_O_RUBBER) - np.arcsin(D_I_RUBBER / np.sqrt(D_O_RUBBER**2 + L_O_RUBBER**2)))
 
-    subAxes = np.zeros_like(stiffness_value_to_train, dtype=float)
-    mainAxes = np.zeros_like(stiffness_value_to_train, dtype=float)
+    return x_disp, z_disp, theta_x
 
-    mask_1_2 = np.isin(stiffness_value_to_train, [1, 2])
-    mask_3 = np.isin(stiffness_value_to_train, [3])
-
-    mask_4_5 = np.isin(stiffness_value_to_train, [4, 5])
-    mask_6 = stiffness_value_to_train == 6
-
-    subAxes[mask_1_2] = theta_x[mask_1_2]
-    mainAxes[mask_1_2] = x_disp[mask_1_2]
-
-    subAxes[mask_3] = theta_x[mask_3]
-    mainAxes[mask_3] = z_disp[mask_3]
-
-    subAxes[mask_4_5] = z_disp[mask_4_5]
-    mainAxes[mask_4_5] = theta_x[mask_4_5]
-
-    subAxes[mask_6] = z_disp[mask_6]
-    mainAxes[mask_6] = 0.2617993877991494  # 15 degree
-
-    return subAxes, mainAxes
+if __name__ == "__main__":
+    # Test code
+    output_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
+    gt_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
+    batch = 32
+    test_keys = ['06_04_NX4', '06_05_NX4']
+    for test_key in test_keys:
+        dataset = VEPDataset(output_path=output_path, test_key=test_key)
+        
+        train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
+    
+        print(train_dataset[0])
+    
