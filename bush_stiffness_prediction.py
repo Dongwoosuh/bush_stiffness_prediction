@@ -29,9 +29,12 @@ def build_model(model_type:str, **hparams):
     if model_type == "CNN":
         model = CNN(device, **hparams)
         
-    elif model_type == "CNN_linear_stiff":
-        model = LSCNN(device, **hparams)
+    elif model_type == "SHCNN":
+        model = SHCNN(device, **hparams)
         
+    elif model_type == "DWCNN":
+        model = DWCNN(device, **hparams)
+            
     elif model_type == "Transformer":
         model = BaseTransformer(device, **hparams)
         
@@ -56,11 +59,22 @@ def train_model(
         hparams = {
             "num_DV" : 11
         }
-    elif model_type == "CNN_linear_stiff":
+    elif model_type == "SHCNN":
         hparams = {
             "num_DV" : 17
         }
         
+    elif model_type == "DWCNN":
+        hparams = {
+            "num_DV" : 17,
+            "BN_momentum" : 0.1,
+            "dropout_rate" : 0.1,
+            "start_ch" : 6*16*16,
+            "padding_param" : 0,
+            "kernel_size" : 3,
+            "stride" : 2,
+            "embdding_dim" : 128}
+     
     elif model_type == "Transformer":
         hparams = {
             "num_DV" : 17,
@@ -107,8 +121,11 @@ def model_test(
     if model_type == "CNN":
         model = CNN.load(model_path, device)
         
-    elif model_type == "CNN_linear_stiff":
-        model = LSCNN.load(model_path, device)
+    elif model_type == "SHCNN":
+        model = SHCNN.load(model_path, device)
+        
+    elif model_type == "DWCNN":
+        model = DWCNN.load(model_path, device)
         
     elif model_type == "Transformer":
         model = BaseTransformer.load(model_path, device)
@@ -164,29 +181,30 @@ def model_test(
         
         
 if __name__ == "__main__" :
+    # Argument Parsing
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=2000)
+    parser.add_argument("--n_epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--model_type", type=str, default="Transformer")
+    parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
-    data_path = r".\resource\combined_data_16_106_70per_energy_linear.npy"
-    gt_data_path = rf'./resource/combined_data_10.npy'
+    data_path = "./resource/250305_122/combined_7.npy" # 데이터 경로
+    
     result_path = pathlib.Path("results") / f"{args.model_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
                 'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-                '06_11_MQ4', 'B_02', 'B_05']
-    # test_keys = [
-    #             'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-    #             '06_11_MQ4', 'B_02', 'B_05']
-    test_keys = ['G_13_04_IK']
+                '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
+    
+    # test_keys = ['G_13_04_IK'] # 단일 부싱 테스트
 
+    # 학습진행
     for test_key in test_keys:
         dataset = VEPDataset(output_path=data_path, test_key=test_key)
         train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
+    # 테스트 진행
     
     # for test_key in test_keys:
     #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
-    #     model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'.\results\Transformer_20250301_010702\{test_key}')
+    #     model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'./results/DWCNN_20250305_174820/{test_key}')

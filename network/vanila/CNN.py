@@ -10,10 +10,11 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import trange, tqdm
 from sklearn.preprocessing import  QuantileTransformer, MinMaxScaler, StandardScaler, RobustScaler, PowerTransformer
-from network.model.basic_model import CNN_small_dropout, CNN_linear_stiff
+from network.model.basic_model import CNN_small_dropout, SHCNN_
+from network.model.dw_model import DWCNN_
 from source import *
 
-__all__ = ["BaseCNN, LSCNN"]
+__all__ = ["BaseCNN, SHCNN", "DWCNN"]
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +144,7 @@ class BaseCNN():
         
         return model
     
-class LSCNN(BaseCNN):
+class SHCNN(BaseCNN):
     def __init__(
         self,
         device: str,
@@ -155,9 +156,39 @@ class LSCNN(BaseCNN):
             "num_DV": num_DV,
         }
         
-        self.model = CNN_linear_stiff(num_DV).to(device)
+        self.model = SHCNN_(**self.hparams).to(device)
         
         self.input_scaler = None
         self.output_scaler = None
         
-    
+class DWCNN(BaseCNN):
+    def __init__(
+        self,
+        device: str,
+        num_DV: int,
+        kernel_size: int,
+        stride: int,
+        padding_param: int,
+        start_ch: int,
+        embdding_dim: int,
+        dropout_rate: float,
+        BN_momentum: float,
+    ):
+        self.device = device
+        
+        self.hparams = {
+            "num_DV": num_DV,
+            "kernel_size": kernel_size,
+            "stride": stride,
+            "padding_param": padding_param,
+            "start_ch": start_ch,
+            "embdding_dim": embdding_dim,
+            "dropout_rate": dropout_rate,
+            "BN_momentum": BN_momentum,
+            
+        }
+        
+        self.model = DWCNN_(**self.hparams).to(device)
+        
+        self.input_scaler = None
+        self.output_scaler = None

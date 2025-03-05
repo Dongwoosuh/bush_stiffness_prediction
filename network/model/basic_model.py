@@ -5,7 +5,7 @@ torch.manual_seed(0)
 
 import pytorch_model_summary
 
-__all__ = ['CNN_small_dropout', 'MLPNN', 'CNN_linear_stiff'] 
+__all__ = ['CNN_small_dropout', 'MLPNN', 'SHCNN_'] 
 class CNN_small_dropout(nn.Module):
 
     def __init__(self,num_DV):
@@ -88,9 +88,9 @@ class CNN_small_dropout(nn.Module):
         x = self.conv_last(x).view([-1,6,16,16])
         return x
     
-class CNN_linear_stiff(nn.Module):
+class SHCNN_(nn.Module):
     def __init__(self, num_DV=17):
-        super(CNN_linear_stiff, self).__init__()
+        super(SHCNN_, self).__init__()
         BN_momentum = 0.1
         dropout_rate = 0.1
 

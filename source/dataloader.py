@@ -188,8 +188,7 @@ def get_extrapolation_range(df):
 
 if __name__ == "__main__":
     # Test code
-    output_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
-    gt_path = r"E:\Dongwoo\TeamWork\Hyundai_bush_2\github\bush_stiffness_prediction\resource\combined_data_16_106_70per_energy_linear.npy"
+    output_path = "./resource/250305_122/combined_7.npy"
     batch = 32
     test_keys = ['06_04_NX4', '06_05_NX4']
     for test_key in test_keys:
