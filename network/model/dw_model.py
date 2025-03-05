@@ -105,7 +105,7 @@ class DWCNN_(nn.Module):
     
 
 if __name__ == "__main__":
-    model = CNN_linear_stiff()
+    model = DWCNN_()
     dummy_input = torch.randn(10,17)
     output = model(dummy_input)
     sumamry = pytorch_model_summary.summary(model, dummy_input, show_input=True)
