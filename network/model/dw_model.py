@@ -56,7 +56,7 @@ class DWCNN_(nn.Module):
             nn.Linear(in_features=embed_total_dim, out_features=self.start_ch),
             nn.BatchNorm1d(self.start_ch, momentum=self.BN_momentum),
             nn.SiLU(inplace=True),
-            nn.Dropout(dropout_rate)
+            nn.Dropout(self.dropout_rate)
         )
 
         # Autoencoder 방식의 Convolution 구조
