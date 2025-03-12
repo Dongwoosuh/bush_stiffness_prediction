@@ -57,8 +57,8 @@ class BaseCNN():
         csv_logger.writerow(["epoch", "train_loss", "val_loss"])
         logger.debug(f"CSV logger path: {csv_logger_path}")        
         
-        optimizer = torch.optim.NAdam(self.model.parameters(), lr=lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=94, T_mult=1, eta_min=0, verbose=False)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=94, T_mult=1, eta_min=0, verbose=False)
         criterion = nn.MSELoss()
         
         epoch_progress = trange(n_epochs, desc="Epoch", leave=True)
@@ -103,10 +103,11 @@ class BaseCNN():
                     self.save(current_out_path)
                     logger.debug(f"Best model updated: {best_val_loss}, updated model saved in {current_out_path}")
 
-                scheduler.step()
+                # scheduler.step()
 
             csv_logger.writerow([epoch, total_train_loss, total_val_loss])
-            
+        
+        return best_val_loss
 
     def forward(self, inputs):
         outputs = self.model(inputs)
@@ -149,11 +150,19 @@ class SHCNN(BaseCNN):
         self,
         device: str,
         num_DV: int,
+        BN_momentum: float,
+        dropout_rate: float,
+        start_ch: int,
+        embedding_dim: int,
     ):
         self.device = device
         
         self.hparams = {
             "num_DV": num_DV,
+            "BN_momentum": BN_momentum,
+            "dropout_rate": dropout_rate,
+            "start_ch": start_ch,
+            "embedding_dim": embedding_dim,
         }
         
         self.model = SHCNN_(**self.hparams).to(device)

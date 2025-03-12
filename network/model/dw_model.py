@@ -70,10 +70,20 @@ class DWCNN_(nn.Module):
                 nn.Conv2d(in_ch, out_ch, kernel_size=kernel_size, stride=stride, padding=1),
                 nn.BatchNorm2d(out_ch, momentum=BN_momentum),
                 nn.SiLU(inplace=True),
+                nn.Conv2d(out_ch, out_ch, kernel_size=kernel_size, stride=1, padding=1),
+                nn.BatchNorm2d(out_ch, momentum=BN_momentum),
+                nn.SiLU(inplace=True),
                 nn.Dropout(dropout_rate)
             ])
         self.encoder = nn.Sequential(*encoder_layers)
 
+        self.bottleneck = nn.Sequential(
+            nn.Conv2d(ch_list[-1], ch_list[-1], kernel_size=kernel_size, stride=1, padding=1),
+            nn.BatchNorm2d(ch_list[-1], momentum=BN_momentum),
+            nn.SiLU(inplace=True),
+            nn.Dropout(dropout_rate)
+        )
+        
         # Decoder
         decoder_layers = []
         for i in range(len(ch_list) - 1, 0, -1):
@@ -82,10 +92,15 @@ class DWCNN_(nn.Module):
                 nn.ConvTranspose2d(in_ch, out_ch, kernel_size=kernel_size, stride=stride, padding=1, output_padding=1),
                 nn.BatchNorm2d(out_ch, momentum=BN_momentum),
                 nn.SiLU(inplace=True),
+                nn.Conv2d(out_ch, out_ch, kernel_size=kernel_size, stride=1, padding=1),
+                nn.BatchNorm2d(out_ch, momentum=BN_momentum),
+                nn.SiLU(inplace=True),
                 nn.Dropout(dropout_rate)
             ])
+            
         self.decoder = nn.Sequential(*decoder_layers)
             
+
     def forward(self, input):
 
         seg1 = input[:, :8]      
@@ -100,6 +115,7 @@ class DWCNN_(nn.Module):
         x = self.fc(x_embed)
         x = x.view(-1, 6, 16, 16)
         x = self.encoder(x)
+        x = self.bottleneck(x)
         x = self.decoder(x)
         return x
     
