@@ -75,13 +75,15 @@ class VEPDataset():
         train_outputs = np.array([np.asarray(o, dtype=np.float32) for o in train_outputs])
         train_outputs = np.log1p(train_outputs)
         
-        x_disp_, z_disp_, theta_x_ = get_extrapolation_range(test_inputs[:,:8])
-        test_inputs = np.hstack((test_inputs, x_disp_.reshape(-1, 1), z_disp_.reshape(-1, 1), theta_x_.reshape(-1,1)))
-        
-        test_inputs = np.array([np.asarray(i, dtype=np.float32) for i in test_inputs])
-        test_inputs[:, 8:14] = np.log1p(test_inputs[:, 8:14])
-        test_outputs = np.array([np.asarray(o, dtype=np.float32) for o in test_outputs])
-        # test_outputs = np.log1p(test_outputs)
+        if len(test_inputs) == 0:
+            pass
+        else:
+            x_disp_, z_disp_, theta_x_ = get_extrapolation_range(test_inputs[:,:8])
+            test_inputs = np.hstack((test_inputs, x_disp_.reshape(-1, 1), z_disp_.reshape(-1, 1), theta_x_.reshape(-1,1)))
+            test_inputs = np.array([np.asarray(i, dtype=np.float32) for i in test_inputs])
+            test_inputs[:, 8:14] = np.log1p(test_inputs[:, 8:14])
+            test_outputs = np.array([np.asarray(o, dtype=np.float32) for o in test_outputs])
+            # test_outputs = np.log1p(test_outputs)
         
         
         # Placeholders for dynamic updates
