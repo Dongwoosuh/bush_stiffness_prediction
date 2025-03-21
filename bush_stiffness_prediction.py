@@ -193,22 +193,24 @@ if __name__ == "__main__" :
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
-    data_path = "./resource/250307_122개_linear/combined_7.npy" # 데이터 경로
-    
-    result_path = pathlib.Path("results") / f"{args.model_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    # test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
-    #             'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-    #             '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
-    
-    test_keys = ['06_04_NX4'] # 단일 부싱 테스트
+    train_percents = [5, 6, 7, 8, 9, 10]
+    for train_percent in train_percents:
+        data_path = f"./resource/250307_122개_linear/combined_{train_percent}.npy" # 데이터 경로
+        
+        result_path = pathlib.Path("results") / f"{args.model_type}_{train_percent*10}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
+                    'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+                    '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
+        
+        # test_keys = ['06_04_NX4'] # 단일 부싱 테스트
 
-    # 학습진행
-    # for test_key in test_keys:
-    #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
-    #     train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
+        # 학습진행
+        for test_key in test_keys:
+            dataset = VEPDataset(output_path=data_path, test_key=test_key)
+            train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
     
-    for test_key in test_keys:
-        dataset = VEPDataset(output_path=data_path, test_key=test_key)
-        model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'./results/SHCNN_20250310_153833/{test_key}')
+    # for test_key in test_keys:
+    #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
+    #     model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'./results/SHCNN_20250310_153833/{test_key}')
