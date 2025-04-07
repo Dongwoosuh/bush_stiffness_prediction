@@ -62,10 +62,10 @@ def train_model(
     elif model_type == "SHCNN":
         hparams = {
             "num_DV" : 17,
-            "BN_momentum" : 0.15699909876441331,
-            "dropout_rate" : 0.43169702960456535,
-            "start_ch" : 2048,
-            "embedding_dim" : 1024
+            "BN_momentum" : 0.1,
+            "dropout_rate" : 0.1,
+            "start_ch" : 1024,
+            "embedding_dim" : 128
         }
         
     elif model_type == "DWCNN":
@@ -149,9 +149,10 @@ def model_test(
     test_dataset = BushDataset(test_inputs, test_outputs)
     
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-    pred_percentages = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    # pred_percentages = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    pred_percentages = [1.0]
     
-    result_df = pd.DataFrame(columns=["stiffness_num", "40%", "50%", "60%", "70%", "80%","90%", "100%"])
+    result_df = pd.DataFrame(columns=["stiffness_num", "100%"])
     for idx, (inputs, outputs) in enumerate(test_loader):
         prediction = model.predict(inputs) # input은 스케일이 이미 된 상태로 들어옴
         prediction = np.expm1(prediction.reshape(-1,16,16))
@@ -169,13 +170,11 @@ def model_test(
             
             wmape_per_percent_list, wmape_full_range_list = results_extraction(input_unscaled, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
             
-            new_row = pd.DataFrame({"stiffness_num": idx_+1, "40%": wmape_per_percent_list[0], "50%": wmape_per_percent_list[1], "60%": wmape_per_percent_list[2],
-                                    "70%": wmape_per_percent_list[3], "80%": wmape_per_percent_list[4], "90%": wmape_per_percent_list[5], "100%": wmape_full_range_list[0]}, index=[0])
+            new_row = pd.DataFrame({"stiffness_num": idx_+1, "100%": wmape_full_range_list[0]}, index=[0])
             
             result_df = pd.concat([result_df, new_row], ignore_index=True) 
             
-        mean_row = pd.DataFrame({"stiffness_num": "Mean", "40%": result_df["40%"].mean(), "50%": result_df["50%"].mean(), "60%": result_df["60%"].mean(),
-                                "70%": result_df["70%"].mean(), "80%": result_df["80%"].mean(), "90%": result_df["90%"].mean(), "100%": result_df["100%"].mean()}, index=[0])   
+        mean_row = pd.DataFrame({"stiffness_num": "Mean", "100%": result_df["100%"].mean()}, index=[0])   
         result_df = pd.concat([result_df, mean_row], ignore_index=True)
         
         result_df.to_csv(os.path.join(model_path, "result.csv"), index=False)    
@@ -193,24 +192,24 @@ if __name__ == "__main__" :
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
-    train_percents = [5, 6, 7, 8, 9, 10]
+    train_percents = [7]
     for train_percent in train_percents:
-        data_path = f"./resource/250307_122개_linear/combined_{train_percent}.npy" # 데이터 경로
+        data_path = f"./resource/250407_126/combined_{train_percent}.npy" # 데이터 경로
         
         result_path = pathlib.Path("results") / f"{args.model_type}_{train_percent*10}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
                     'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
                     '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
         
-        # test_keys = ['06_04_NX4'] # 단일 부싱 테스트
+        test_keys = ['06_05_NX4'] # 단일 부싱 테스트
 
         # 학습진행
-        for test_key in test_keys:
-            dataset = VEPDataset(output_path=data_path, test_key=test_key)
-            train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
+        # for test_key in test_keys:
+        #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
+        #     train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
     
-    # for test_key in test_keys:
-    #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
-    #     model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'./results/SHCNN_20250310_153833/{test_key}')
+    for test_key in test_keys:
+        dataset = VEPDataset(output_path=data_path, test_key=test_key)
+        model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'./results/SHCNN_70_20250407_145059/{test_key}')
