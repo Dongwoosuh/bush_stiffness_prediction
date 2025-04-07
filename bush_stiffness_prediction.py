@@ -63,9 +63,9 @@ def train_model(
         hparams = {
             "num_DV" : 17,
             "BN_momentum" : 0.1,
-            "dropout_rate" : 0.1,
-            "start_ch" : 1024,
-            "embedding_dim" : 128
+            "dropout_rate" : 0.3,
+            "start_ch" : 512,
+            "embedding_dim" : 1024
         }
         
     elif model_type == "DWCNN":
@@ -178,7 +178,11 @@ def model_test(
         result_df = pd.concat([result_df, mean_row], ignore_index=True)
         
         result_df.to_csv(os.path.join(model_path, "result.csv"), index=False)    
-        
+    
+    result_dict = {'Test Key': test_key,
+                   'Mean WMAPE': result_df["100%"].mean(),
+                   'Std WMAPE': result_df["100%"].std()}
+    return result_dict
      
         
         
@@ -186,9 +190,9 @@ def model_test(
 if __name__ == "__main__" :
     # Argument Parsing
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=2000)
+    parser.add_argument("--n_epochs", type=int, default=3000)
     parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=1e-5)
+    parser.add_argument("--lr", type=float, default=0.0005)
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
@@ -201,15 +205,21 @@ if __name__ == "__main__" :
                     'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
                     '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
         
-        test_keys = ['06_05_NX4'] # 단일 부싱 테스트
+        #test_keys = ['06_05_NX4'] # 단일 부싱 테스트
+        exclude_keys = ['Run7','Run37','Run49','Run72','Run81','Run83','Run88','Run89','Run92','Run96']
 
         # 학습진행
         # for test_key in test_keys:
-        #     dataset = VEPDataset(output_path=data_path, test_key=test_key)
+        #     dataset = VEPDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
         #     train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
+    model_path = rf'./results/SHCNN_70_20250407_201437'
     
+    result_dict_list = []
     for test_key in test_keys:
-        dataset = VEPDataset(output_path=data_path, test_key=test_key)
-        model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'./results/SHCNN_70_20250407_145059/{test_key}')
+        dataset = VEPDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
+        result_dict = model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'{model_path}/{test_key}')
+        result_dict_list.append(result_dict)
+        
+        pd.DataFrame(result_dict_list).to_csv(os.path.join(model_path, "test_result.csv"), index=False)
