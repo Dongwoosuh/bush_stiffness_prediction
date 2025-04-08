@@ -68,27 +68,50 @@ def train_model(
 def objective(trial):
     
     lr = trial.suggest_float("lr", 1e-5, 1e-1)
-    batch_size = trial.suggest_categorical("batch_size", [4, 8, 16, 32, 64])
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
     BN_momentum = trial.suggest_float("BN_momentum", 0.1, 0.9)
     dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.5)
     start_ch = trial.suggest_categorical("start_ch", [128, 256, 512, 1024, 2048])
     embedding_dim = trial.suggest_categorical("embedding_dim", [64, 128, 256, 512, 1024])
+    activation = trial.suggest_categorical("activation", ['SiLU', 'ReLU', 'LeakyReLU', 'ELU'])
+    data_path = "./resource/250407_126/combined_7.npy" # 데이터 경로
     
-    data_path = "./resource/250307_122개_linear/combined_7.npy" # 데이터 경로
+    test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
+                'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+                '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
     
-    # test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
-    #             'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-    #             '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
-    
-    test_key = '06_04_NX4' # 단일 부싱 테스트
+    exclude_keys = ['Run7','Run37','Run49','Run72','Run81','Run83','Run88','Run89','Run92','Run96']
+
+    # test_key = '06_04_NX4' # 단일 부싱 테스트
     # test_key = ''
 
     # 학습진행
-    dataset = VEPDataset(output_path=data_path, test_key=test_key)
-    
-    val_loss = train_model("SHCNN", dataset, n_epochs=1000, batch_size=batch_size, lr=lr, test_key=test_key, save_path=result_path, BN_momentum=BN_momentum, dropout_rate=dropout_rate, start_ch=start_ch, embedding_dim=embedding_dim)
+    val_loss_list = []
+    for test_key in test_keys:
+        dataset = VEPDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
+        val_loss = train_model(
+                            "SHCNN",
+                            dataset,
+                            n_epochs=1000, 
+                            batch_size=batch_size,
+                            lr=lr,
+                            test_key=test_key,
+                            save_path=result_path,
+                            BN_momentum=BN_momentum,
+                            dropout_rate=dropout_rate,
+                            start_ch=start_ch, 
+                            embedding_dim=embedding_dim,
+                            activation=activation
+                               )
+        val_loss_list.append(val_loss)
+        
+    val_loss = np.mean(val_loss_list)
     
     return val_loss
+
+def save_callback(study, trial):
+    df = study.trials_dataframe()
+    df.to_csv("tuning_result.csv", index=False)
 
 if __name__ == '__main__':
     
@@ -99,7 +122,7 @@ if __name__ == '__main__':
     result_path = pathlib.Path("results") / 'tuned' / f"Tuned_SHCNN_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
     study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=args.n_trials)
+    study.optimize(objective, n_trials=args.n_trials,  callbacks=[save_callback])
     
     print("Best trial:")
     print(study.best_trial)

@@ -48,14 +48,14 @@ class BaseCNN():
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
         
             
-        current_out_path = os.path.join(save_path, f"{test_key}")
-        os.makedirs(current_out_path, exist_ok=True)
-        logger.debug(f"Output path: {current_out_path}")
+        # current_out_path = os.path.join(save_path, f"{test_key}")
+        # os.makedirs(current_out_path, exist_ok=True)
+        # logger.debug(f"Output path: {current_out_path}")
         
-        csv_logger_path = os.path.join(current_out_path, "loss.csv")
-        csv_logger = csv.writer(open(csv_logger_path, "w", newline=""))
-        csv_logger.writerow(["epoch", "train_loss", "val_loss"])
-        logger.debug(f"CSV logger path: {csv_logger_path}")        
+        # csv_logger_path = os.path.join(current_out_path, "loss.csv")
+        # csv_logger = csv.writer(open(csv_logger_path, "w", newline=""))
+        # csv_logger.writerow(["epoch", "train_loss", "val_loss"])
+        # logger.debug(f"CSV logger path: {csv_logger_path}")        
         
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
         # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=94, T_mult=1, eta_min=0, verbose=False)
@@ -102,7 +102,7 @@ class BaseCNN():
                     
                 # scheduler.step()
 
-            csv_logger.writerow([epoch, total_train_loss, total_val_loss])
+            # csv_logger.writerow([epoch, total_train_loss, total_val_loss])
         
         return best_val_loss
 
@@ -151,6 +151,7 @@ class SHCNN(BaseCNN):
         dropout_rate: float,
         start_ch: int,
         embedding_dim: int,
+        activation: str = "SiLU",
     ):
         self.device = device
         
@@ -160,6 +161,7 @@ class SHCNN(BaseCNN):
             "dropout_rate": dropout_rate,
             "start_ch": start_ch,
             "embedding_dim": embedding_dim,
+            "activation": activation,
         }
         
         self.model = SHCNN_(**self.hparams).to(device)

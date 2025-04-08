@@ -154,6 +154,7 @@ class SHCNN(BaseCNN):
         dropout_rate: float,
         start_ch: int,
         embedding_dim: int,
+        activation: str = "SiLU",
     ):
         self.device = device
         
@@ -163,6 +164,7 @@ class SHCNN(BaseCNN):
             "dropout_rate": dropout_rate,
             "start_ch": start_ch,
             "embedding_dim": embedding_dim,
+            "activation": activation,
         }
         
         self.model = SHCNN_(**self.hparams).to(device)

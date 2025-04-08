@@ -6,6 +6,57 @@ torch.manual_seed(0)
 import pytorch_model_summary
 
 __all__ = ['CNN_small_dropout', 'MLPNN', 'SHCNN_'] 
+class BaseMLP(nn.Module):
+    def __init__(self):
+        super(BaseMLP, self).__init__()
+
+    def get_activation(self, name):
+        activations = {
+            "SiLU": nn.SiLU(),
+            "Sigmoid": nn.Sigmoid(),
+            "Tanh": nn.Tanh(),
+            "ELU": nn.ELU(),
+            "LeakyReLU": nn.LeakyReLU(),
+            "Mish": nn.Mish(),
+            "SeLU": nn.SELU(),
+            "ReLU": nn.ReLU(),
+            "ReLU6": nn.ReLU6(),
+            "None": nn.Identity(),
+        }
+        if name in activations:
+            return activations[name]
+        raise ValueError(f"Invalid activation: {name}")
+    
+class MLPNN(BaseMLP):
+    def __init__(
+        self,
+        input_size,
+        node_num,
+        output_size,
+        num_layers,
+        hidden_activation,
+        output_activation,
+        dropout_rate,
+    ):
+        super(MLPNN, self).__init__()
+        self.layers = nn.ModuleList()
+
+        self.layers.append(nn.Linear(input_size, node_num))
+        self.layers.append(self.get_activation(hidden_activation))
+        self.layers.append(nn.Dropout(dropout_rate))
+
+        for _ in range(num_layers - 1):
+            self.layers.append(nn.Linear(node_num, node_num))
+            self.layers.append(self.get_activation(hidden_activation))
+            self.layers.append(nn.Dropout(dropout_rate))
+
+        self.layers.append(nn.Linear(node_num, output_size))
+        self.layers.append(self.get_activation(output_activation))
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
 class CNN_small_dropout(nn.Module):
 
     def __init__(self,num_DV):
@@ -88,13 +139,15 @@ class CNN_small_dropout(nn.Module):
         x = self.conv_last(x).view([-1,6,16,16])
         return x
     
-class SHCNN_(nn.Module):
+class SHCNN_(BaseMLP):
     def __init__(self, 
                 num_DV=17,
                 dropout_rate=0.1, 
                 BN_momentum = 0.1,
                 start_ch = 1024,
-                embedding_dim=128):
+                embedding_dim=128,
+                activation='SiLU'
+                ):
         super(SHCNN_, self).__init__()
 
         self.padding_param = 0
@@ -105,7 +158,6 @@ class SHCNN_(nn.Module):
         self.dropout_rate = dropout_rate
         self.BN_momentum = BN_momentum
         
-
         seg1_dim = 8
         seg2_dim = 6
         seg3_dim = num_DV - 14
@@ -113,19 +165,20 @@ class SHCNN_(nn.Module):
         self.embed1 = nn.Sequential(
             nn.Linear(seg1_dim, self.embedding_dim),
             nn.BatchNorm1d(self.embedding_dim, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
+            # nn.SiLU(inplace=True),
             # nn.Dropout(dropout_rate)
         )
         self.embed2 = nn.Sequential(
             nn.Linear(seg2_dim, self.embedding_dim),
             nn.BatchNorm1d(self.embedding_dim, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             # nn.Dropout(dropout_rate)
         )
         self.embed3 = nn.Sequential(
             nn.Linear(seg3_dim, self.embedding_dim),
             nn.BatchNorm1d(self.embedding_dim, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             # nn.Dropout(dropout_rate)
             )
 
@@ -134,7 +187,7 @@ class SHCNN_(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(in_features=embed_total_dim, out_features=self.start_ch * 2 * 2),
             nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             nn.Dropout(self.dropout_rate)
         )
 
@@ -142,60 +195,60 @@ class SHCNN_(nn.Module):
             nn.ConvTranspose2d(self.start_ch, self.start_ch // 2, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 2, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 2, kernel_size=self.kernel_size, 
                                  stride=1, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 2, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             # nn.Dropout(dropout_rate),
             nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
 
             nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 4, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 4, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 4, kernel_size=self.kernel_size, 
                                  stride=1, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 4, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             # nn.Dropout(dropout_rate),
             nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
 
             nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 8, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 8, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 8, kernel_size=self.kernel_size, 
                                  stride=1, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 8, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             # nn.Dropout(dropout_rate),
             nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
 
             nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 16, kernel_size=3, 
                                  stride=self.stride, padding=0),
             nn.BatchNorm2d(self.start_ch // 16, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 16, kernel_size=3, 
                                  stride=1, padding=0),
             nn.BatchNorm2d(self.start_ch // 16, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             # nn.Dropout(dropout_rate),
             nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
 
             nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 32, kernel_size=3, 
                                  stride=self.stride, padding=0),
             nn.BatchNorm2d(self.start_ch // 32, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 32, self.start_ch // 32, kernel_size=3, 
                                  stride=1, padding=0),
             nn.BatchNorm2d(self.start_ch // 32, eps=0.001, momentum=self.BN_momentum),
-            nn.SiLU(inplace=True),
+            self.get_activation(activation),
             # nn.Dropout(dropout_rate),
             nn.AvgPool2d(3, stride=2, padding=1),
         )
@@ -226,59 +279,8 @@ class SHCNN_(nn.Module):
         return x
     
     
-class BaseMLP(nn.Module):
-    def __init__(self):
-        super(BaseMLP, self).__init__()
-
-    def get_activation(self, name):
-        activations = {
-            "SiLU": nn.SiLU(),
-            "Sigmoid": nn.Sigmoid(),
-            "Tanh": nn.Tanh(),
-            "ELU": nn.ELU(),
-            "LeakyReLU": nn.LeakyReLU(),
-            "Mish": nn.Mish(),
-            "SeLU": nn.SELU(),
-            "ReLU": nn.ReLU(),
-            "ReLU6": nn.ReLU6(),
-            "None": nn.Identity(),
-        }
-        if name in activations:
-            return activations[name]
-        raise ValueError(f"Invalid activation: {name}")
     
     
-    
-class MLPNN(BaseMLP):
-    def __init__(
-        self,
-        input_size,
-        node_num,
-        output_size,
-        num_layers,
-        hidden_activation,
-        output_activation,
-        dropout_rate,
-    ):
-        super(MLPNN, self).__init__()
-        self.layers = nn.ModuleList()
-
-        self.layers.append(nn.Linear(input_size, node_num))
-        self.layers.append(self.get_activation(hidden_activation))
-        self.layers.append(nn.Dropout(dropout_rate))
-
-        for _ in range(num_layers - 1):
-            self.layers.append(nn.Linear(node_num, node_num))
-            self.layers.append(self.get_activation(hidden_activation))
-            self.layers.append(nn.Dropout(dropout_rate))
-
-        self.layers.append(nn.Linear(node_num, output_size))
-        self.layers.append(self.get_activation(output_activation))
-
-    def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
     
 if __name__ == "__main__": 
     model = SHCNN_(num_DV=17, dropout_rate=0.1, BN_momentum=0.1)
