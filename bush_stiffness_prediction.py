@@ -62,13 +62,12 @@ def train_model(
     elif model_type == "SHCNN":
         hparams = {
             "num_DV" : 17,
-            "BN_momentum" : 0.8536429521146476,
-            "dropout_rate" : 0.32321017504483274,
+            "BN_momentum" : 0.8734380667693132,
+            "dropout_rate" : 0.3350467422883634,
             "start_ch" : 1024,
-            "embedding_dim" : 256,
+            "embedding_dim" : 1024,
             'activation' : 'ELU'
         }
-        
     elif model_type == "DWCNN":
         hparams = {
             "num_DV" : 17,
@@ -191,15 +190,15 @@ def model_test(
 if __name__ == "__main__" :
     # Argument Parsing
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=3000)
+    parser.add_argument("--n_epochs", type=int, default=2000)
     parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--lr", type=float, default=0.006353853354475032)
+    parser.add_argument("--lr", type=float, default=0.0043594117274392)
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
     train_percents = [7]
     for train_percent in train_percents:
-        data_path = f"./resource/250407_126/combined_{train_percent}.npy" # 데이터 경로
+        data_path = f"./resource/250405_149부싱_origin_G_13_04_노치제거/combined_{train_percent}.npy" # 데이터 경로
         
         result_path = pathlib.Path("results") / f"{args.model_type}_{train_percent*10}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
@@ -215,7 +214,7 @@ if __name__ == "__main__" :
             train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
-    # model_path = rf'./results/DWCNN_70_20250408_173937'
+    # model_path = rf'./results/SHCNN_70_20250411_142917'
     
     # result_dict_list = []
     # for test_key in test_keys:
