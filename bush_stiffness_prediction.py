@@ -62,12 +62,13 @@ def train_model(
     elif model_type == "SHCNN":
         hparams = {
             "num_DV" : 17,
-            "BN_momentum" : 0.8734380667693132,
-            "dropout_rate" : 0.3350467422883634,
-            "start_ch" : 1024,
-            "embedding_dim" : 1024,
+            "BN_momentum" : 0.6998388939423119,
+            "dropout_rate" : 0.11878037998709513,
+            "start_ch" : 512,
+            "embedding_dim" : 256,
             'activation' : 'ELU'
         }
+        
     elif model_type == "DWCNN":
         hparams = {
             "num_DV" : 17,
@@ -190,15 +191,15 @@ def model_test(
 if __name__ == "__main__" :
     # Argument Parsing
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=2000)
-    parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--lr", type=float, default=0.0043594117274392)
+    parser.add_argument("--n_epochs", type=int, default=3000)
+    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--lr", type=float, default=0.028553017277541174)
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
     train_percents = [7]
     for train_percent in train_percents:
-        data_path = f"./resource/250405_149부싱_origin_G_13_04_노치제거/combined_{train_percent}.npy" # 데이터 경로
+        data_path = f"./resource/250413_150개/combined_{train_percent}.npy" # 데이터 경로
         
         result_path = pathlib.Path("results") / f"{args.model_type}_{train_percent*10}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
         test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
@@ -206,8 +207,13 @@ if __name__ == "__main__" :
                     '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
         
         # test_keys = ['06_05_NX4'] # 단일 부싱 테스트
-        exclude_keys = ['Run7','Run37','Run49','Run72','Run81','Run83','Run88','Run89','Run92','Run96']
+        exclude_keys = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
+                        'Run101','Run102','Run103','Run104','Run105']
 
+        # # exclude under 40%  acc: 82%
+        # exclude_keys2 = ['Run128', 'Run37', 'Run92', 'Run89', 'Run88', 'Run83', 'Run81', 'Run123','Run7', 'Run96', 'Run73', 'Run72', 'Run149',
+        #                 'Run21', 'Run28', 'Run49', 'Run101', 'Run62', 'Run164', 'Run75', 'Run71', 'Run30', 'Run33', 'Run125', 'Run138']
+        
         # 학습진행
         for test_key in test_keys:
             dataset = VEPDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
