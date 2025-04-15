@@ -183,10 +183,13 @@ if __name__ == "__main__" :
     print("All trials:")
     print(study.trials_dataframe())
     
-    study.trials_dataframe().to_csv("tuning_result.csv", index=False)
-    
+    if not os.path.exists(result_path):
+        os.makedirs(result_path)
+
     save_path = os.path.join(result_path, "tuning_result.json")
     with open(save_path, "w") as f:
         json.dump(study.best_params, f)
+    study.trials_dataframe().to_csv(save_path + "tuning_result.csv", index=False)
+
 
         
