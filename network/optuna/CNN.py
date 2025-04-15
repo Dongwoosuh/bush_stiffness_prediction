@@ -36,11 +36,17 @@ class BaseCNN():
         self.input_scaler = None
         self.output_scaler = None
         
-    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_key:str, save_path:str ):
+    def train(self,
+            train_dataset:BushDataset, 
+            val_dataset:BushDataset,
+            input_scaler:StandardScaler,
+            output_scaler:StandardScaler,
+            n_epochs:int, 
+            batch_size:int,
+            lr:float,
+            fold_idx:int,
+            save_path:str ):
         
-    
-        train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
-
         self.input_scaler = input_scaler
         self.output_scaler = output_scaler
         

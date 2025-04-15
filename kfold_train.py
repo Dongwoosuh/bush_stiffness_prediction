@@ -5,17 +5,23 @@ import json
 import torch
 import datetime
 import pathlib
-import pandas as pd
-from torch.utils.data import DataLoader
 from copy import deepcopy
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import StandardScaler
+import optuna 
 
 import numpy as np
-import tqdm
 
 from source import *
-from network.vanila import *
+from network.optuna import *
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 
 logger = logging.getLogger(__name__)
+
 
 def build_model(model_type:str, **hparams):
     if torch.cuda.is_available():
@@ -35,197 +41,152 @@ def build_model(model_type:str, **hparams):
     elif model_type == "DWCNN":
         model = DWCNN(device, **hparams)
             
-    elif model_type == "Transformer":
-        model = BaseTransformer(device, **hparams)
-        
-    elif model_type == "MLP":
-        model = MLP(device, **hparams)
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     
     return model
 
-def train_model(
+     
+def run_kfold(
     model_type:str,
     dataset,
     n_epochs:int,
     batch_size:int,
     lr:float,
-    test_key:int,
-    save_path: str
+    save_path: str,
+    **hparams
     ):
     
-    if model_type == "CNN":
-        hparams = {
-            "num_DV" : 11
-        }
-    elif model_type == "SHCNN":
-        hparams = {
-            "num_DV" : 17,
-            "BN_momentum" : 0.6998388939423119,
-            "dropout_rate" : 0.11878037998709513,
-            "start_ch" : 512,
-            "embedding_dim" : 256,
-            'activation' : 'ELU'
-        }
-        
-    elif model_type == "DWCNN":
-        hparams = {
-            "num_DV" : 17,
-            "BN_momentum" : 0.2,
-            "dropout_rate" : 0.2,
-            "start_ch" : 6*16*16,
-            "padding_param" : 0,
-            "kernel_size" : 3,
-            "stride" : 2,
-            "embdding_dim" : 1024}
-     
-    elif model_type == "Transformer":
-        hparams = {
-            "num_DV" : 17,
-            "embed_dim" : 128,
-            "num_heads" : 4,
-            "num_layers" : 2,
-            "output_dim" : 256,
-            "dropout" : 0.1
-        }
-        
-    elif model_type == "MLP":
-        hparams = {
-            "num_DV" : 12,
-            "hidden_features" : 128,
-            "num_layers" : 5,
-            "drop_out" : 0.3,
-            "hidden_activation" : "SiLU"
-        }
-    else:
-        raise ValueError(f"Invalid model type: {model_type}")
-    
-    
-    ml_model = build_model(model_type=model_type, **hparams)
 
-    logger.info(f"LOOCV Iteration: {test_key}_Bush started")
+    X = dataset.np_train_input
+    Y = dataset.np_train_output
+    
+    kf = KFold(n_splits=10, shuffle=True, random_state=2025)
+    
+    best_val_loss = -float("inf")
+    best_fold = None
+    val_loss_list = []
+    
+    for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X), start=1):
+        X_tr , X_val = X[train_idx], X[val_idx]
+        Y_tr , Y_val = Y[train_idx], Y[val_idx]
+        
+        input_scaler = StandardScaler()
+        output_scaler = StandardScaler()
+        
+        field_range = 1 
+        
+        Y_tr, Y_val = Y_tr.reshape(-1, field_range), Y_val.reshape(-1, field_range)
+        
+        X_tr = input_scaler.fit_transform(X_tr)
+        X_val = input_scaler.transform(X_val)
+        Y_tr = output_scaler.fit_transform(Y_tr)
+        Y_val = output_scaler.transform(Y_val)
+        
+        Y_tr = Y_tr.reshape(-1, 6, 16, 16)
+        Y_val = Y_val.reshape(-1, 6, 16, 16)
+        # Create datasets and data loaders
+        train_dataset = BushDataset(X_tr, Y_tr)
+        val_dataset = BushDataset(X_val, Y_val)
+    
 
-    best_val_loss = ml_model.train(dataset, n_epochs, batch_size, lr, test_key=test_key, save_path=save_path)
+        ml_model = build_model(model_type=model_type, num_DV = 17 , **hparams)
+        
+        val_loss = ml_model.train(
+            train_dataset= train_dataset,
+            val_dataset= val_dataset,
+            input_scaler= input_scaler,
+            output_scaler= output_scaler,
+            n_epochs= n_epochs,
+            batch_size= batch_size,
+            lr= lr,
+            fold_idx= fold_idx,
+            save_path= save_path
+        )
+        val_loss_list.append(val_loss)
+        
+        logger.info(f"Fold {fold_idx}: val loss: {val_loss}")
+        if val_loss > best_val_loss:
+            best_val_loss = val_loss
+            best_fold = fold_idx
     
-def model_test(
-    model_type:str,
-    dataset,
-    test_key:int,
-    model_path: str
-    ):
+    logger.info(f"Best fold: {best_fold} with val loss: {best_val_loss}")
+    val_loss_mean = np.mean(val_loss_list)
     
-    if torch.cuda.is_available():
-        device = "cuda"
-    elif torch.backends.mps.is_available():
-        device = "mps"
-    else:
-        device = "cpu"
-        logger.warning("CUDA is not available. Running on CPU")
-        
-    if model_type == "CNN":
-        model = BaseCNN.load(model_path, device)
-        
-    elif model_type == "SHCNN":
-        model = SHCNN.load(model_path, device)
-        
-    elif model_type == "DWCNN":
-        model = DWCNN.load(model_path, device)
-        
-    elif model_type == "Transformer":
-        model = BaseTransformer.load(model_path, device)
-        
-    elif model_type == "MLP":
-        model = MLP.load(model_path, device)
-    else:
-        raise ValueError(f"Invalid model type: {model_type}")
-    
-    input_scaler = model.input_scaler
-    output_scaler = model.output_scaler
-    
-    test_inputs = dataset.np_test_input
-    test_inputs = input_scaler.transform(test_inputs)
-    test_outputs = dataset.np_test_output
-    
-    test_dataset = BushDataset(test_inputs, test_outputs)
-    
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-    # pred_percentages = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    pred_percentages = [1.0]
-    
-    result_df = pd.DataFrame(columns=["stiffness_num", "100%"])
-    for idx, (inputs, outputs) in enumerate(test_loader):
-        prediction = model.predict(inputs) # input은 스케일이 이미 된 상태로 들어옴
-        prediction = np.expm1(prediction.reshape(-1,16,16))
-        
-        gt_output = outputs.numpy().reshape(-1,16,16) # output은 굳이 스케일링해서 넣을 필요 없음
-        # gt_output = np.expm1(gt_output)
-        
-        input_unscaled = model.input_scaler.inverse_transform(inputs.numpy())
-        
-        for idx_ in range(len(gt_output)):
+    return val_loss_mean, best_val_loss, best_fold
             
-            save_path = os.path.join(model_path, f'stiffness_{idx_+1}')
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
             
-            wmape_per_percent_list, wmape_full_range_list = results_extraction(input_unscaled, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
-            
-            new_row = pd.DataFrame({"stiffness_num": idx_+1, "100%": wmape_full_range_list[0]}, index=[0])
-            
-            result_df = pd.concat([result_df, new_row], ignore_index=True) 
-            
-        mean_row = pd.DataFrame({"stiffness_num": "Mean", "100%": result_df["100%"].mean()}, index=[0])   
-        result_df = pd.concat([result_df, mean_row], ignore_index=True)
-        
-        result_df.to_csv(os.path.join(model_path, "result.csv"), index=False)    
+def objective(trial):
     
-    result_dict = {'Test Key': test_key,
-                   'Mean WMAPE': result_df["100%"].mean(),
-                   'Std WMAPE': result_df["100%"].std()}
-    return result_dict
-     
-        
-        
-        
+    lr = trial.suggest_float("lr", 1e-5, 1e-1)
+    batch_size = trial.suggest_categorical("batch_size", [16, 32, 64, 128])
+    BN_momentum = trial.suggest_float("BN_momentum", 0.1, 0.9)
+    dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.5)
+    start_ch = trial.suggest_categorical("start_ch", [128, 256, 512, 1024, 2048])
+    embedding_dim = trial.suggest_categorical("embedding_dim", [64, 128, 256, 512, 1024])
+    activation = trial.suggest_categorical("activation", ['SiLU', 'ReLU', 'LeakyReLU', 'ELU'])
+    data_path = "./resource/250413_150개/combined_7.npy" # 데이터 경로
+
+    exclude_keys1 = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
+                    'Run101','Run102','Run103','Run104','Run105']
+
+    # # exclude under 40%  acc: 82%
+    exclude_keys2 = ['Run128', 'Run37', 'Run92', 'Run89', 'Run88', 'Run83', 'Run81', 'Run123','Run7', 'Run96', 'Run73', 'Run72', 'Run149',
+                    'Run21', 'Run28', 'Run49', 'Run101', 'Run62', 'Run164', 'Run75', 'Run71', 'Run30', 'Run33', 'Run125', 'Run138']
+    
+    exclude_keys = list(set(exclude_keys1 + exclude_keys2))
+    
+    dataset = VEPDataset(output_path=data_path, test_key=None, exclude_keys=exclude_keys)
+    val_loss_mean, best_val_loss, best_fold = run_kfold(
+                                    "SHCNN",
+                                    dataset,
+                                    n_epochs=1000, 
+                                    batch_size=batch_size,
+                                    lr=lr,
+                                    save_path=result_path,
+                                    BN_momentum=BN_momentum,
+                                    dropout_rate=dropout_rate,
+                                    start_ch=start_ch, 
+                                    embedding_dim=embedding_dim,
+                                    activation=activation
+                                    )
+    
+    return val_loss_mean
+
+def save_callback(study, trial):
+    df = study.trials_dataframe()
+    df.to_csv("tuning_result.csv", index=False)
+    
 if __name__ == "__main__" :
-    # Argument Parsing
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=3000)
-    parser.add_argument("--batch_size", type=int, default=128)
-    parser.add_argument("--lr", type=float, default=0.028553017277541174)
-    parser.add_argument("--model_type", type=str, default="SHCNN")
+    parser.add_argument("--n_trials", type=int, default=500)
     args = parser.parse_args()
     
-    train_percents = [7]
-    for train_percent in train_percents:
-        data_path = f"./resource/250413_150개/combined_{train_percent}.npy" # 데이터 경로
-        
-        result_path = pathlib.Path("results") / f"{args.model_type}_{train_percent*10}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
-                    'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-                    '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
-        
-        # test_keys = ['06_05_NX4'] # 단일 부싱 테스트
-        exclude_keys = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
-                        'Run101','Run102','Run103','Run104','Run105']
-
-        # # exclude under 40%  acc: 82%
-        # exclude_keys2 = ['Run128', 'Run37', 'Run92', 'Run89', 'Run88', 'Run83', 'Run81', 'Run123','Run7', 'Run96', 'Run73', 'Run72', 'Run149',
-        #                 'Run21', 'Run28', 'Run49', 'Run101', 'Run62', 'Run164', 'Run75', 'Run71', 'Run30', 'Run33', 'Run125', 'Run138']
-        
-        # 학습진행
-        for test_key in test_keys:
-            dataset = VEPDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
-            train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
-        
-    # 테스트 진행
-    # model_path = rf'./results/SHCNN_70_20250411_142917'
+    result_path = pathlib.Path("results") / 'tuned' / f"Tuned_SHCNN_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
     
-    # result_dict_list = []
-    # for test_key in test_keys:
-    #     dataset = VEPDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
-    #     result_dict = model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'{model_path}/{test_key}')
-    #     result_dict_list.append(result_dict)
+    study = optuna.create_study(direction="minimize")
+    study.optimize(objective, n_trials=args.n_trials,  callbacks=[save_callback])
+    
+    print("Best trial:")
+    print(study.best_trial)
+    
+    print("Best parameters:")
+    print(study.best_params)
+    
+    print("Best value:")
+    print(study.best_value)
+    
+    print("All trials:")
+    print(study.trials)
+    
+    print("All trials:")
+    print(study.trials_dataframe())
+    
+    study.trials_dataframe().to_csv("tuning_result.csv", index=False)
+    
+    save_path = os.path.join(result_path, "tuning_result.json")
+    with open(save_path, "w") as f:
+        json.dump(study.best_params, f)
+
         
-    #     pd.DataFrame(result_dict_list).to_csv(os.path.join(model_path, "test_result.csv"), index=False)
