@@ -129,7 +129,7 @@ class VEPDataset():
         return train_dataset, val_dataset, self.input_scaler, self.output_scaler
     
     def get_test_keys(self, test_keys, exclude_keys):
-        test_keys = [test_keys]
+        test_keys = test_keys
         exclude_keys = exclude_keys
         # test_data = {key: self.total_data[key] for key in test_keys if key in self.total_data}
         # train_data = {key: self.total_data[key] for key in self.total_data if key not in test_keys}

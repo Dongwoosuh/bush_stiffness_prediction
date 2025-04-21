@@ -36,19 +36,18 @@ class BaseCNN():
         self.input_scaler = None
         self.output_scaler = None
         
-    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_key:str, save_path:str ):
+    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, save_path:str ):
         
     
         train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
 
         self.input_scaler = input_scaler
         self.output_scaler = output_scaler
-        
+
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
-        
             
-        current_out_path = os.path.join(save_path, f"{test_key}")
+        current_out_path = save_path
         os.makedirs(current_out_path, exist_ok=True)
         logger.debug(f"Output path: {current_out_path}")
         
