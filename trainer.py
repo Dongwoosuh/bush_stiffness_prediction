@@ -223,7 +223,7 @@ if __name__ == "__main__" :
         train_idx, test_idx = train_test_split(
             all_indices,
             test_size=0.1,
-            shuffle=True,
+            shuffle=False,
             random_state=args.seed,
         )
         
