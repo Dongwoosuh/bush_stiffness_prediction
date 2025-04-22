@@ -216,14 +216,14 @@ if __name__ == "__main__" :
         
         total_data = np.load(data_path, allow_pickle=True).item()
         
-        data_keys_list = list(set(total_data.keys()) - set(exclude_keys))
+        data_keys_list = sorted(set(total_data.keys()) - set(exclude_keys))
         
         all_indices = np.arange(len(data_keys_list))
         
         train_idx, test_idx = train_test_split(
             all_indices,
             test_size=0.1,
-            shuffle=False,
+            shuffle=True,
             random_state=args.seed,
         )
         
