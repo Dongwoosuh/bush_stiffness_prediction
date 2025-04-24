@@ -153,7 +153,8 @@ class SHCNN(BaseCNN):
         BN_momentum: float,
         dropout_rate: float,
         start_ch: int,
-        embedding_dim: int,
+        embedding_dim1: int,
+        embedding_dim2: int,
         activation: str = "SiLU",
     ):
         self.device = device
@@ -163,7 +164,8 @@ class SHCNN(BaseCNN):
             "BN_momentum": BN_momentum,
             "dropout_rate": dropout_rate,
             "start_ch": start_ch,
-            "embedding_dim": embedding_dim,
+            "embedding_dim1": embedding_dim1,
+            "embedding_dim2": embedding_dim2,
             "activation": activation,
         }
         

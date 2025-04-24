@@ -65,7 +65,8 @@ def train_model(
             "BN_momentum" : 0.6998388939423119,
             "dropout_rate" : 0.11878037998709513,
             "start_ch" : 512,
-            "embedding_dim" : 256,
+            "embedding_dim1" : 256,
+            "embedding_dim2" : 128,
             'activation' : 'ELU'
         }
         
@@ -201,18 +202,20 @@ if __name__ == "__main__" :
     for train_percent in train_percents:
         data_path = f"./resource/250413_150개/combined_{train_percent}.npy" # 데이터 경로
         
-        result_path = pathlib.Path("results") / f"{args.model_type}_{train_percent*10}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        result_path = pathlib.Path("results") / f"LOO/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
         test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
                     'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
                     '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
         
         # test_keys = ['06_05_NX4'] # 단일 부싱 테스트
-        exclude_keys = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
+        exclude_keys1 = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
                         'Run101','Run102','Run103','Run104','Run105']
 
         # # exclude under 40%  acc: 82%
-        # exclude_keys2 = ['Run128', 'Run37', 'Run92', 'Run89', 'Run88', 'Run83', 'Run81', 'Run123','Run7', 'Run96', 'Run73', 'Run72', 'Run149',
-        #                 'Run21', 'Run28', 'Run49', 'Run101', 'Run62', 'Run164', 'Run75', 'Run71', 'Run30', 'Run33', 'Run125', 'Run138']
+        exclude_keys2 = ['Run128', 'Run37', 'Run92', 'Run89', 'Run88', 'Run83', 'Run81', 'Run123','Run7', 'Run96', 'Run73', 'Run72', 'Run149',
+                        'Run21', 'Run28', 'Run49', 'Run101', 'Run62', 'Run164', 'Run75', 'Run71', 'Run30', 'Run33', 'Run125', 'Run138']
+        
+        exclude_keys = list(set(exclude_keys1 + exclude_keys2))
         
         # 학습진행
         for test_key in test_keys:
