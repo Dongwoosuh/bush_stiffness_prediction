@@ -33,15 +33,17 @@ class BaseCNN():
         
         self.model = CNN_small_dropout(num_DV).to(device)
         
-        self.input_scaler = None
+        self.input_scaler_shape = None
+        self.input_scaler_linear
         self.output_scaler = None
         
     def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_key:str, save_path:str ):
         
     
-        train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
+        train_dataset, val_dataset, input_scaler_shape, input_scaler_linear, output_scaler= dataset.get_datasets()
 
-        self.input_scaler = input_scaler
+        self.input_scaler_shape = input_scaler_shape
+        self.input_scaler_linear = input_scaler_linear
         self.output_scaler = output_scaler
         
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
@@ -116,7 +118,6 @@ class BaseCNN():
     def predict(self, inputs):
         self.model.eval()
         with torch.no_grad():
-            input_unscaled = self.input_scaler.inverse_transform(inputs)
             inputs = inputs.to(self.device)
             outputs = self.forward(inputs)
             outputs = outputs.detach().cpu().numpy()
@@ -131,7 +132,8 @@ class BaseCNN():
             
     def save(self, path):
         torch.save(self.model.state_dict(), os.path.join(path, "model.pth"))
-        torch.save(self.input_scaler, os.path.join(path, "input_scaler.pth"))
+        torch.save(self.input_scaler_shape, os.path.join(path, "input_scaler_shape.pth"))
+        torch.save(self.input_scaler_linear, os.path.join(path, "input_scaler_linear.pth"))
         torch.save(self.output_scaler, os.path.join(path, "output_scalers.pth"))
         json.dump(self.hparams, open(os.path.join(path, "hparams.json"), "w"))
         
@@ -140,7 +142,8 @@ class BaseCNN():
         hparams = json.load(open(os.path.join(path, "hparams.json"), "r"))
         model = cls(**hparams, device=device)
         model.model.load_state_dict(torch.load(os.path.join(path, "model.pth")))
-        model.input_scaler = torch.load(os.path.join(path, "input_scaler.pth"))
+        model.input_scaler_shape = torch.load(os.path.join(path, "input_scaler_shape.pth"))
+        model.input_scaler_linear = torch.load(os.path.join(path, "input_scaler_linear.pth"))
         model.output_scaler = torch.load(os.path.join(path, "output_scalers.pth"))
         
         return model
@@ -171,7 +174,8 @@ class SHCNN(BaseCNN):
         
         self.model = SHCNN_(**self.hparams).to(device)
         
-        self.input_scaler = None
+        self.input_scaler_shape = None
+        self.input_scaler_linear = None
         self.output_scaler = None
         
 class DWCNN(BaseCNN):

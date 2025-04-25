@@ -62,11 +62,11 @@ def train_model(
     elif model_type == "SHCNN":
         hparams = {
             "num_DV" : 17,
-            "BN_momentum" : 0.6998388939423119,
-            "dropout_rate" : 0.11878037998709513,
-            "start_ch" : 512,
-            "embedding_dim1" : 256,
-            "embedding_dim2" : 128,
+            "BN_momentum" : 0.8636509551373722,
+            "dropout_rate" : 0.3834460393755802,
+            "start_ch" : 2048,
+            "embedding_dim1" : 512,
+            "embedding_dim2" : 1024,
             'activation' : 'ELU'
         }
         
@@ -141,11 +141,18 @@ def model_test(
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     
-    input_scaler = model.input_scaler
+    input_scaler_shape = model.input_scaler_shape
+    input_scaler_linear = model.input_scaler_linear
     output_scaler = model.output_scaler
     
     test_inputs = dataset.np_test_input
-    test_inputs = input_scaler.transform(test_inputs)
+    test_inputs_shape = test_inputs[:,:8]
+    
+    test_inputs_shape = input_scaler_shape.transform(test_inputs[:,:8])
+    test_inputs_linear = input_scaler_linear.transform(test_inputs[:,8:14].flatten().reshape(-1,1))
+    test_inputs_linear = test_inputs_linear.reshape(test_inputs[:,8:14].shape)
+    
+    test_inputs = np.hstack((test_inputs_shape, test_inputs_linear))
     test_outputs = dataset.np_test_output
     
     test_dataset = BushDataset(test_inputs, test_outputs)
@@ -160,9 +167,6 @@ def model_test(
         prediction = np.expm1(prediction.reshape(-1,16,16))
         
         gt_output = outputs.numpy().reshape(-1,16,16) # output은 굳이 스케일링해서 넣을 필요 없음
-        # gt_output = np.expm1(gt_output)
-        
-        input_unscaled = model.input_scaler.inverse_transform(inputs.numpy())
         
         for idx_ in range(len(gt_output)):
             
@@ -170,7 +174,7 @@ def model_test(
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             
-            wmape_per_percent_list, wmape_full_range_list = results_extraction(input_unscaled, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
+            wmape_per_percent_list, wmape_full_range_list = results_extraction(test_inputs_shape, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
             
             new_row = pd.DataFrame({"stiffness_num": idx_+1, "100%": wmape_full_range_list[0]}, index=[0])
             
@@ -223,7 +227,7 @@ if __name__ == "__main__" :
             train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
-    # model_path = rf'./results/SHCNN_70_20250411_142917'
+    # model_path = rf'./results/LOO/20250425_111930_SHCNN_70'
     
     # result_dict_list = []
     # for test_key in test_keys:
