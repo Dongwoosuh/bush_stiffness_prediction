@@ -146,7 +146,7 @@ def model_test(
     output_scaler = model.output_scaler
     
     test_inputs = dataset.np_test_input
-    test_inputs_shape = test_inputs[:,:8]
+    test_inputs_shape_unscaled = test_inputs[:,:8]
     
     test_inputs_shape = input_scaler_shape.transform(test_inputs[:,:8])
     test_inputs_linear = input_scaler_linear.transform(test_inputs[:,8:14].flatten().reshape(-1,1))
@@ -174,7 +174,7 @@ def model_test(
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             
-            wmape_per_percent_list, wmape_full_range_list = results_extraction(test_inputs_shape, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
+            wmape_per_percent_list, wmape_full_range_list = results_extraction(test_inputs_shape_unscaled, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
             
             new_row = pd.DataFrame({"stiffness_num": idx_+1, "100%": wmape_full_range_list[0]}, index=[0])
             
@@ -206,10 +206,14 @@ if __name__ == "__main__" :
     for train_percent in train_percents:
         data_path = f"./resource/250413_150개/combined_{train_percent}.npy" # 데이터 경로
         
-        result_path = pathlib.Path("results") / f"LOO/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
-        test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
-                    'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-                    '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
+        result_path = pathlib.Path("results") / f"Method_04/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
+        test_keys = [
+                    '06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
+                    'G_11_06_IK', 'G_12_05_IK', 
+                    'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+                    '06_11_MQ4',
+                    'B_02', 'B_05'
+                    ] # 현대차 부싱 이름들
         
         # test_keys = ['06_05_NX4'] # 단일 부싱 테스트
         exclude_keys1 = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
@@ -227,7 +231,7 @@ if __name__ == "__main__" :
             train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
-    # model_path = rf'./results/LOO/20250425_111930_SHCNN_70'
+    # model_path = rf'./results/LOO/20250425_114206_SHCNN_70'
     
     # result_dict_list = []
     # for test_key in test_keys:
