@@ -93,7 +93,7 @@ def objective(trial):
         val_loss = train_model(
                             "SHCNN",
                             dataset,
-                            n_epochs=1000, 
+                            n_epochs=1, 
                             batch_size=batch_size,
                             lr=lr,
                             test_key=test_key,
@@ -111,9 +111,30 @@ def objective(trial):
     
     return val_loss
 
-def save_callback(study, trial):
-    df = study.trials_dataframe()
-    df.to_csv("tuning_result.csv", index=False)
+def get_save_callback(save_dir):
+    def save_callback(study: optuna.Study, trial: optuna.trial.FrozenTrial):
+        # 전체 trial 기록 저장
+        df_all = study.trials_dataframe()
+        df_all.to_csv(save_dir / "tuning_result.csv", index=False)
+
+        # best trial이 갱신되었을 경우
+        if study.best_trial == trial:
+            best_data = trial.params.copy()
+            best_data["value"] = trial.value
+            best_data["datetime"] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            best_df = pd.DataFrame([best_data])
+
+            # best_trial.csv는 덮어쓰기
+            best_df.to_csv(save_dir / "best_trial.csv", index=False)
+
+            # best_trial_history.csv는 누적 저장
+            history_path = save_dir / "best_trial_history.csv"
+            if history_path.exists():
+                best_df.to_csv(history_path, mode='a', header=False, index=False)
+            else:
+                best_df.to_csv(history_path, index=False)
+
+    return save_callback
 
 if __name__ == '__main__':
     
@@ -122,9 +143,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     result_path = pathlib.Path("results") / 'tuned' / f"Tuned_SHCNN_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    result_path.mkdir(parents=True, exist_ok=True)
     
     study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=args.n_trials,  callbacks=[save_callback])
+    study.optimize(objective, n_trials=args.n_trials, callbacks=[get_save_callback(result_path)])
     
     print("Best trial:")
     print(study.best_trial)
