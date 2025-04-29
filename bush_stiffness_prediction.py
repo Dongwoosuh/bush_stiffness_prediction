@@ -62,8 +62,8 @@ def train_model(
     elif model_type == "SHCNN":
         hparams = {
             "num_DV" : 17,
-            "BN_momentum" : 0.8636509551373722,
-            "dropout_rate" : 0.3834460393755802,
+            "BN_momentum" : 0.1,
+            "dropout_rate" : 0.2,
             "start_ch" : 2048,
             "embedding_dim1" : 512,
             "embedding_dim2" : 1024,
@@ -197,33 +197,37 @@ if __name__ == "__main__" :
     # Argument Parsing
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=3000)
-    parser.add_argument("--batch_size", type=int, default=128)
-    parser.add_argument("--lr", type=float, default=0.028553017277541174)
+    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--lr", type=float, default=0.0005)
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
     train_percents = [7]
     for train_percent in train_percents:
-        data_path = f"./resource/250413_150개/combined_{train_percent}.npy" # 데이터 경로
+        data_path = f"./resource/250426/combined_{train_percent}.npy" # 데이터 경로
         
         result_path = pathlib.Path("results") / f"Method_04/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
         test_keys = [
-                    '06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
-                    'G_11_06_IK', 'G_12_05_IK', 
-                    'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-                    '06_11_MQ4',
-                    'B_02', 'B_05'
+                    '06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK',
+                    'G_08_06_IK', 
+                    # 'G_09_05_IK', 'G_10_03_IK',
+                    # 'G_11_06_IK', 'G_12_05_IK', 
+                    # 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+                    # '06_11_MQ4',
+                    # 'B_02', 'B_05'
                     ] # 현대차 부싱 이름들
         
         # test_keys = ['06_05_NX4'] # 단일 부싱 테스트
-        exclude_keys1 = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
-                        'Run101','Run102','Run103','Run104','Run105']
+        # exclude_keys1 = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
+        #                 'Run101','Run102','Run103','Run104','Run105']
 
-        # # exclude under 40%  acc: 82%
-        exclude_keys2 = ['Run128', 'Run37', 'Run92', 'Run89', 'Run88', 'Run83', 'Run81', 'Run123','Run7', 'Run96', 'Run73', 'Run72', 'Run149',
-                        'Run21', 'Run28', 'Run49', 'Run101', 'Run62', 'Run164', 'Run75', 'Run71', 'Run30', 'Run33', 'Run125', 'Run138']
+        # # # exclude under 40%  acc: 82%
+        # exclude_keys2 = ['Run128', 'Run37', 'Run92', 'Run89', 'Run88', 'Run83', 'Run81', 'Run123','Run7', 'Run96', 'Run73', 'Run72', 'Run149',
+        #                 'Run21', 'Run28', 'Run49', 'Run101', 'Run62', 'Run164', 'Run75', 'Run71', 'Run30', 'Run33', 'Run125', 'Run138']
         
-        exclude_keys = list(set(exclude_keys1 + exclude_keys2))
+        exclude_key3 = ['Run92', 'Run89', 'Run88', 'Run83', 'Run128', 'Run81', 'Run37',]
+        
+        exclude_keys = list(set(exclude_key3))
         
         # 학습진행
         for test_key in test_keys:
@@ -231,7 +235,7 @@ if __name__ == "__main__" :
             train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
-    # model_path = rf'./results/LOO/20250425_114206_SHCNN_70'
+    # model_path = rf'./results/Method_04/20250429_112451_SHCNN_70'
     
     # result_dict_list = []
     # for test_key in test_keys:

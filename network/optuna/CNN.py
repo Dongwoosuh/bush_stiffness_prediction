@@ -118,7 +118,7 @@ class BaseCNN():
             outputs = self.forward(inputs)
             outputs = outputs.detach().cpu().numpy()
             
-            outputs_flat = outputs.reshape(-1, 6*16*16)
+            outputs_flat = outputs.reshape(-1,1)
             # output_scaler = self.output_scaler[int(input_unscaled[:, -3])-1]
             outputs_flat = self.output_scaler.inverse_transform(outputs_flat)
             

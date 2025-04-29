@@ -4,6 +4,7 @@ import numpy as np
 import logging
 import csv
 import json
+import copy
 
 import torch
 import torch.nn as nn
@@ -37,7 +38,7 @@ class BaseCNN():
         self.input_scaler_linear
         self.output_scaler = None
         
-    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_key:str, save_path:str ):
+    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_key:str, save_path:str, save_interval:int = 200 ):
         
     
         train_dataset, val_dataset, input_scaler_shape, input_scaler_linear, output_scaler= dataset.get_datasets()
@@ -101,9 +102,15 @@ class BaseCNN():
                 
                 if best_val_loss > total_val_loss:
                     best_val_loss = total_val_loss
-                    
-                    self.save(current_out_path)
+                    best_model_weights = copy.deepcopy(self.model.state_dict())
+                    # self.save(current_out_path)
                     logger.debug(f"Best model updated: {best_val_loss}, updated model saved in {current_out_path}")
+                
+                # Optionally save best every `save_interval` epochs
+                if (epoch + 1) % save_interval == 0:
+                    self.model.load_state_dict(best_model_weights)
+                    self.save(current_out_path)
+                    logger.debug(f"Saved intermediate best model at epoch {epoch + 1}: {best_val_loss}")
 
                 # scheduler.step()
 
