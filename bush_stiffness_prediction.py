@@ -63,10 +63,10 @@ def train_model(
         hparams = {
             "num_DV" : 17,
             "BN_momentum" : 0.1,
-            "dropout_rate" : 0.2,
+            "dropout_rate" : 0.3,
             "start_ch" : 2048,
             "embedding_dim1" : 512,
-            "embedding_dim2" : 1024,
+            "embedding_dim2" : 2048,
             'activation' : 'ELU'
         }
         
@@ -198,7 +198,7 @@ if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=3000)
     parser.add_argument("--batch_size", type=int, default=256)
-    parser.add_argument("--lr", type=float, default=0.0005)
+    parser.add_argument("--lr", type=float, default=0.0001)
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
@@ -206,15 +206,15 @@ if __name__ == "__main__" :
     for train_percent in train_percents:
         data_path = f"./resource/250426/combined_{train_percent}.npy" # 데이터 경로
         
-        result_path = pathlib.Path("results") / f"Method_04/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
+        result_path = pathlib.Path("results") / f"Compare/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
         test_keys = [
                     '06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK',
                     'G_08_06_IK', 
-                    # 'G_09_05_IK', 'G_10_03_IK',
-                    # 'G_11_06_IK', 'G_12_05_IK', 
-                    # 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-                    # '06_11_MQ4',
-                    # 'B_02', 'B_05'
+                    'G_09_05_IK', 'G_10_03_IK', 'G_11_01_IK'
+                    'G_11_06_IK', 'G_12_05_IK', 
+                    'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+                    '06_11_MQ4',
+                    'B_02', 'B_05'
                     ] # 현대차 부싱 이름들
         
         # test_keys = ['06_05_NX4'] # 단일 부싱 테스트
@@ -235,7 +235,7 @@ if __name__ == "__main__" :
             train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
-    # model_path = rf'./results/Method_04/20250429_112451_SHCNN_70'
+    # model_path = rf'./results/Compare/20250429_144251_SHCNN_70'
     
     # result_dict_list = []
     # for test_key in test_keys:

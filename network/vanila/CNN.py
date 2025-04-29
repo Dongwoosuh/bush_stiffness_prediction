@@ -61,7 +61,7 @@ class BaseCNN():
         logger.debug(f"CSV logger path: {csv_logger_path}")        
         
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=94, T_mult=1, eta_min=0, verbose=False)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=94, T_mult=1, eta_min=0, verbose=False)
         criterion = nn.MSELoss()
         
         epoch_progress = trange(n_epochs, desc="Epoch", leave=True)
@@ -112,7 +112,7 @@ class BaseCNN():
                     self.save(current_out_path)
                     logger.debug(f"Saved intermediate best model at epoch {epoch + 1}: {best_val_loss}")
 
-                # scheduler.step()
+                scheduler.step()
 
             csv_logger.writerow([epoch, total_train_loss, total_val_loss])
         
@@ -149,9 +149,9 @@ class BaseCNN():
         hparams = json.load(open(os.path.join(path, "hparams.json"), "r"))
         model = cls(**hparams, device=device)
         model.model.load_state_dict(torch.load(os.path.join(path, "model.pth")))
-        model.input_scaler_shape = torch.load(os.path.join(path, "input_scaler_shape.pth"))
-        model.input_scaler_linear = torch.load(os.path.join(path, "input_scaler_linear.pth"))
-        model.output_scaler = torch.load(os.path.join(path, "output_scalers.pth"))
+        model.input_scaler_shape = torch.load(os.path.join(path, "input_scaler_shape.pth"), weights_only= False)
+        model.input_scaler_linear = torch.load(os.path.join(path, "input_scaler_linear.pth"), weights_only= False)
+        model.output_scaler = torch.load(os.path.join(path, "output_scalers.pth"), weights_only= False)
         
         return model
     
