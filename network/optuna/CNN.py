@@ -39,9 +39,10 @@ class BaseCNN():
     def train(self, dataset, n_epochs:int, batch_size:int, lr:float, test_key:str, save_path:str ):
         
     
-        train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
+        train_dataset, val_dataset, input_scaler_shape, input_scaler_linear, output_scaler= dataset.get_datasets()
 
-        self.input_scaler = input_scaler
+        self.input_scaler_shape = input_scaler_shape
+        self.input_scaler_linear = input_scaler_linear
         self.output_scaler = output_scaler
         
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
@@ -150,7 +151,8 @@ class SHCNN(BaseCNN):
         BN_momentum: float,
         dropout_rate: float,
         start_ch: int,
-        embedding_dim: int,
+        embedding_dim1: int,
+        embedding_dim2: int,
         activation: str = "SiLU",
     ):
         self.device = device
@@ -160,13 +162,15 @@ class SHCNN(BaseCNN):
             "BN_momentum": BN_momentum,
             "dropout_rate": dropout_rate,
             "start_ch": start_ch,
-            "embedding_dim": embedding_dim,
+            "embedding_dim1": embedding_dim1,
+            "embedding_dim2": embedding_dim2,
             "activation": activation,
         }
         
         self.model = SHCNN_(**self.hparams).to(device)
         
-        self.input_scaler = None
+        self.input_scaler_shape = None
+        self.input_scaler_linear = None
         self.output_scaler = None
         
 class DWCNN(BaseCNN):
