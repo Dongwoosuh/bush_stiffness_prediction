@@ -72,8 +72,8 @@ def objective(trial):
     BN_momentum = trial.suggest_float("BN_momentum", 0.1, 0.3)
     dropout_rate = trial.suggest_float("dropout_rate", 0.0, 0.4)
     start_ch = trial.suggest_categorical("start_ch", [128, 256, 512, 1024, 2048, 4096])
-    embedding_dim1 = trial.suggest_categorical("embedding_dim", [64, 128, 256, 512, 1024, 2048])
-    embedding_dim2 = trial.suggest_categorical("embedding_dim", [64, 128, 256, 512, 1024, 2048])
+    embedding_dim1 = trial.suggest_categorical("embedding_dim1", [64, 128, 256, 512, 1024, 2048])
+    embedding_dim2 = trial.suggest_categorical("embedding_dim2", [64, 128, 256, 512, 1024, 2048])
     activation = trial.suggest_categorical("activation", ['SiLU', 'ReLU', 'LeakyReLU', 'ELU'])
     data_path = "./resource/250426/combined_7.npy" # 데이터 경로
     
