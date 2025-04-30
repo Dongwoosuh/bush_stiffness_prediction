@@ -177,7 +177,7 @@ class SHCNN_(BaseMLP):
             nn.Linear(seg2_dim, self.embedding_dim2),
             nn.BatchNorm1d(self.embedding_dim2, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.Linear(self.embedding_dim2, self.embedding_dim2),
+            nn.Linear(self.embedding_dim2, self.start_ch * 2 * 2),
             # nn.Dropout(dropout_rate)
         )
         self.embed3 = nn.Sequential(
@@ -187,7 +187,7 @@ class SHCNN_(BaseMLP):
             # nn.Dropout(dropout_rate)
             )
 
-        embed_total_dim =  self.embedding_dim1 + self.embedding_dim2
+        embed_total_dim =  self.embedding_dim1 
 
         self.fc = nn.Sequential(
             nn.Linear(in_features=embed_total_dim, out_features=self.start_ch * 2 * 2),
@@ -276,10 +276,11 @@ class SHCNN_(BaseMLP):
         emb2 = self.embed2(seg2)   
         # emb3 = self.embed3(seg3)
 
-        x_embed = torch.cat([emb1, emb2], dim=1)  
+        # x_embed = torch.cat([emb1, emb2], dim=1)  
 
         # x_embed = emb1 + emb2 + emb3
-        x = self.fc(x_embed)  
+        x = self.fc(emb1)  
+        x = x + emb2
         x = x.view(-1, self.start_ch, 2, 2)
         x = self.conv5(x)
         x = self.conv_last(x).view(-1, 6, 16, 16)
