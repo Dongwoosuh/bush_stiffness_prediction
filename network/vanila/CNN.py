@@ -62,11 +62,18 @@ class BaseCNN():
         
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=94, T_mult=1, eta_min=0, verbose=False)
-        criterion = nn.MSELoss()
+        criterion = nn.MSELoss(reduction='none')
         
         epoch_progress = trange(n_epochs, desc="Epoch", leave=True)
         best_val_loss = float('inf')
         best_model_weights = None
+        
+        H, W = 16, 16
+        i = torch.arange(1, H+1, dtype=torch.float32) / H   # (32,)
+        j = torch.arange(1, W+1, dtype=torch.float32) / W   # (32,)
+        weight = (i.unsqueeze(1) + j.unsqueeze(0)) / 2       # (32,32)
+        weight = weight / weight.mean()     
+        weight = weight.to(self.device)
         
         for epoch in epoch_progress:
             self.model.train()
@@ -76,8 +83,9 @@ class BaseCNN():
                 inputs, targets = inputs.to(self.device), targets.to(self.device)
                 
                 predictions= self.forward(inputs)
-                loss = criterion(predictions, targets)
-                loss.backward()
+                loss_map = criterion(predictions, targets)
+                loss_map = loss_map * weight 
+                loss = loss_map.mean()
                 
                 optimizer.step()
                 optimizer.zero_grad()
@@ -93,7 +101,9 @@ class BaseCNN():
                     inputs, targets = inputs.to(self.device), targets.to(self.device)
                     
                     predictions = self.forward(inputs)
-                    val_loss = criterion(predictions, targets)
+                    val_loss_map = criterion(predictions, targets)
+                    val_loss_map = val_loss_map * weight
+                    val_loss = val_loss_map.mean()
                     
                     total_val_loss += val_loss.item()
                 
