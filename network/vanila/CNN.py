@@ -87,6 +87,7 @@ class BaseCNN():
                 loss_map = loss_map * weight 
                 loss = loss_map.mean()
                 
+                loss.backward() 
                 optimizer.step()
                 optimizer.zero_grad()
                 

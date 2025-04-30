@@ -206,7 +206,7 @@ if __name__ == "__main__" :
     for train_percent in train_percents:
         data_path = f"./resource/250426/combined_{train_percent}.npy" # 데이터 경로
         
-        result_path = pathlib.Path("results") / f"Compare/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
+        result_path = pathlib.Path("results") / f"Method_05/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
         test_keys = [
                     '06_04_NX4', '06_05_NX4', 
                     'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK',
