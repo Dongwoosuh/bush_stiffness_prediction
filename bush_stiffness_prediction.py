@@ -65,8 +65,8 @@ def train_model(
             "BN_momentum" : 0.1,
             "dropout_rate" : 0.3,
             "start_ch" : 2048,
-            "embedding_dim1" : 512,
-            "embedding_dim2" : 2048,
+            "embedding_dim1" : 1024,
+            "embedding_dim2" : 1024,
             'activation' : 'ELU'
         }
         
@@ -196,9 +196,9 @@ def model_test(
 if __name__ == "__main__" :
     # Argument Parsing
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_epochs", type=int, default=205)
+    parser.add_argument("--n_epochs", type=int, default=3000)
     parser.add_argument("--batch_size", type=int, default=256)
-    parser.add_argument("--lr", type=float, default=0.0001)
+    parser.add_argument("--lr", type=float, default=0.0002)
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
@@ -206,21 +206,25 @@ if __name__ == "__main__" :
     for train_percent in train_percents:
         data_path = f"./resource/250426/combined_{train_percent}.npy" # 데이터 경로
         
-        result_path = pathlib.Path("results") / f"Method_04/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
+        result_path = pathlib.Path("results") / f"LOO_Final/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
         test_keys = [
-                    '06_04_NX4', '06_05_NX4', 
+                    # '06_04_NX4', '06_05_NX4', 
                     'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK',
                     'G_08_06_IK', 
-                    'G_09_05_IK', 'G_10_03_IK', 'G_11_01_IK',
-                    'G_11_06_IK', 'G_12_05_IK', 
-                    'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-                    '06_11_MQ4',
+                    # 'G_09_05_IK', 'G_10_03_IK', 'G_11_01_IK',
+                    # 'G_11_06_IK', 'G_12_05_IK', 
+                    # 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+                    # '06_11_MQ4',
                     'B_02', 'B_05'
                     ] # 현대차 부싱 이름들
         
-        exclude_key3 = ['Run92', 'Run89', 'Run88', 'Run83', 'Run128', 'Run81', 'Run37',]
+        exclude_key4 = ['Run92', 'Run89', 'Run88', 'Run154', 'Run83', 'Run128', 'Run81', 'Run37',
+                            'Run96', 'Run49', 'Run7',  'Run123',   ## 15 %
+                            'Run101', 'Run72', 'Run75', 'Run164', 'Run191', 'Run149',
+                            'Run166', 'Run28', 'Run138', 'Run62']   ## 20%
+
         
-        exclude_keys = list(set(exclude_key3))
+        exclude_keys = list(set(exclude_key4))
         
         # 학습진행
         for test_key in test_keys:
