@@ -92,7 +92,8 @@ class VEPDataset():
         self.np_train_output = train_outputs
         self.np_test_input = test_inputs
         self.np_test_output = test_outputs
-        self.input_scaler = None
+        self.input_scaler_shape = None
+        self.input_scaler_linear = None
         self.output_scaler = None
         
     def get_datasets(self):
@@ -102,7 +103,14 @@ class VEPDataset():
             self.np_train_input, self.np_train_output, test_size=0.1, random_state=2025
         )
         
-        self.input_scaler = StandardScaler()
+        train_input_shape = train_input[:, :8]
+        train_input_linear = train_input[:,8:14].flatten().reshape(-1,1)
+        
+        val_input_shape = val_input[:, :8]
+        val_input_linear = val_input[:,8:14].flatten().reshape(-1,1)
+        
+        self.input_scaler_shape = StandardScaler()
+        self.input_scaler_linear = StandardScaler()
         self.output_scaler = StandardScaler()
         
         field_range = 1
@@ -110,10 +118,22 @@ class VEPDataset():
         train_output = train_output.reshape(-1, field_range)
         val_output = val_output.reshape(-1, field_range)
         
-        train_input = self.input_scaler.fit_transform(train_input)
-        val_input = self.input_scaler.transform(val_input)
+        self.input_scaler_shape.fit(train_input_shape)
+        train_input_shape = self.input_scaler_shape.transform(train_input_shape)
+        val_input_shape = self.input_scaler_shape.transform(val_input_shape)
+        
+        self.input_scaler_linear.fit(train_input_linear)
+        train_input_linear = self.input_scaler_linear.transform(train_input_linear).reshape(train_input[:,8:14].shape)
+        val_input_linear = self.input_scaler_linear.transform(val_input_linear).reshape(val_input[:,8:14].shape)
+        
+        train_input = np.hstack((train_input_shape, train_input_linear))
+        val_input = np.hstack((val_input_shape, val_input_linear))
+        
         train_output = self.output_scaler.fit_transform(train_output)
         val_output = self.output_scaler.transform(val_output)
+        
+        # train_input = self.input_scaler.fit_transform(train_input)
+        # val_input = self.input_scaler.transform(val_input)
         
         train_output = train_output.reshape(-1, 6, 16, 16)
         val_output = val_output.reshape(-1, 6, 16, 16)
@@ -126,7 +146,7 @@ class VEPDataset():
         # val_loader = DataLoader(val_dataset, batch_size=self.batch, shuffle=True, drop_last=False)
         # test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)  # Single sample for LOOCV
 
-        return train_dataset, val_dataset, self.input_scaler, self.output_scaler
+        return train_dataset, val_dataset, self.input_scaler_shape, self.input_scaler_linear, self.output_scaler
     
     def get_test_keys(self, test_keys, exclude_keys):
         test_keys = test_keys

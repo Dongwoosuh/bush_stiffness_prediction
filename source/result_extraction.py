@@ -5,6 +5,10 @@ from source import calculate_wmape
 __all__ = ['results_extraction'] 
 
 def results_extraction(input_data_unscaled, prediction, gt_output, pred_percentages:list, save_path:str):
+    
+    x_disp, z_disp, theta_x = get_extrapolation_range(input_data_unscaled[:,:8])
+    input_data_unscaled = np.hstack((input_data_unscaled, x_disp.reshape(-1, 1), z_disp.reshape(-1, 1), theta_x.reshape(-1,1))) 
+    
     sub_axes_inverse = input_data_unscaled[:,-2]
     main_axes_inverse = input_data_unscaled[:,-1]
 
@@ -59,3 +63,23 @@ def results_extraction(input_data_unscaled, prediction, gt_output, pred_percenta
     
     return wmpae_per_percent_list, wmape_full_range_list
     
+    
+def get_extrapolation_range(df):
+
+    df = np.array(df, dtype=np.float64)
+
+    scale_factor = 1.0487
+    # Calculate rubber parameters
+    D_O_RUBBER = 2 * (df[:, 0] + df[:, 1])
+    D_I_RUBBER = 2 * df[:, 0]
+    L_O_RUBBER = 2 * df[:, 2]
+    L_I_RUBBER = 2 * (df[:, 2] + df[:, 3])
+
+    x_disp = np.where(df[:,6]<= 0,
+                  (D_O_RUBBER - D_I_RUBBER) / 2,
+                  (D_O_RUBBER - D_I_RUBBER) / 2 - df[:,6])
+    
+    z_disp = (L_I_RUBBER * scale_factor - L_O_RUBBER) / 2
+    theta_x = (np.arctan(D_O_RUBBER / L_O_RUBBER) - np.arcsin(D_I_RUBBER / np.sqrt(D_O_RUBBER**2 + L_O_RUBBER**2)))
+
+    return x_disp, z_disp, theta_x

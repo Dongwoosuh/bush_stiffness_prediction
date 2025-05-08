@@ -59,13 +59,15 @@ def train_model(
         hparams = {
             "num_DV" : 11
         }
+        
     elif model_type == "SHCNN":
         hparams = {
             "num_DV" : 17,
-            "BN_momentum" : 0.8636509551373722,
-            "dropout_rate" : 0.3834460393755802,
+            "BN_momentum" : 0.1,
+            "dropout_rate" : 0.3,
             "start_ch" : 2048,
-            "embedding_dim" : 512,
+            "embedding_dim1" : 1024,
+            "embedding_dim2" : 1024,
             'activation' : 'ELU'
         }
 
@@ -138,11 +140,18 @@ def model_test(
     else:
         raise ValueError(f"Invalid model type: {model_type}")
     
-    input_scaler = model.input_scaler
+    input_scaler_shape = model.input_scaler_shape
+    input_scaler_linear = model.input_scaler_linear
     output_scaler = model.output_scaler
     
     test_inputs = dataset.np_test_input
-    test_inputs = input_scaler.transform(test_inputs)
+    test_inputs_shape_unscaled = test_inputs[:,:8]
+    
+    test_inputs_shape = input_scaler_shape.transform(test_inputs[:,:8])
+    test_inputs_linear = input_scaler_linear.transform(test_inputs[:,8:14].flatten().reshape(-1,1))
+    test_inputs_linear = test_inputs_linear.reshape(test_inputs[:,8:14].shape)
+    
+    test_inputs = np.hstack((test_inputs_shape, test_inputs_linear))
     test_outputs = dataset.np_test_output
     
     test_dataset = BushDataset(test_inputs, test_outputs)
@@ -164,15 +173,13 @@ def model_test(
         gt_output = outputs.numpy().reshape(-1,16,16) # output은 굳이 스케일링해서 넣을 필요 없음
         # gt_output = np.expm1(gt_output)
         
-        input_unscaled = model.input_scaler.inverse_transform(inputs.numpy())
-        
         for idx_ in range(len(gt_output)):
             
             save_path = os.path.join(bush_save_path, f'stiffness_{idx_+1}')
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             
-            wmape_per_percent_list, wmape_full_range_list = results_extraction(input_unscaled, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
+            wmape_per_percent_list, wmape_full_range_list = results_extraction(test_inputs_shape_unscaled, prediction[idx_], gt_output[idx_], pred_percentages=pred_percentages, save_path=save_path)
             
             new_row = pd.DataFrame({"stiffness_num": idx_+1, "100%": wmape_full_range_list[0]}, index=[0])
             
@@ -195,24 +202,23 @@ if __name__ == "__main__" :
     # Argument Parsing
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=3000)
-    parser.add_argument("--batch_size", type=int, default=128)
-    parser.add_argument("--lr", type=float, default=0.012879921810409839)
+    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--lr", type=float, default=0.0002)
     parser.add_argument("--model_type", type=str, default="SHCNN")
     parser.add_argument("--seed", type=int, default=2025)
     args = parser.parse_args()
     
     train_percents = [7]
     for train_percent in train_percents:
-        data_path = f"./resource/250413_150개/combined_{train_percent}.npy" # 데이터 경로
-        
-        exclude_keys1 = ['Run82', 'Run83', 'Run85', 'Run86', 'Run88', 'Run89', 'Run100',
-                        'Run101','Run102','Run103','Run104','Run105']
+        data_path = f"./resource/250504/combined_{train_percent}.npy" # 데이터 경로
+            
+        exclude_keys4 = ['Run92', 'Run89', 'Run88', 'Run154', 'Run83', 'Run128', 'Run81', 'Run37',
+                            'Run96', 'Run49', 'Run7',  'Run123',   ## 15 %
+                            'Run101', 'Run72', 'Run75', 'Run164', 'Run191', 'Run149',
+                            'Run166', 'Run28', 'Run138', 'Run62']   ## 20%
 
-        # # exclude under 40%  acc: 82%
-        exclude_keys2 = ['Run128', 'Run37', 'Run92', 'Run89', 'Run88', 'Run83', 'Run81', 'Run123','Run7', 'Run96', 'Run73', 'Run72', 'Run149',
-                        'Run21', 'Run28', 'Run49', 'Run101', 'Run62', 'Run164', 'Run75', 'Run71', 'Run30', 'Run33', 'Run125', 'Run138']
         
-        exclude_keys = list(set(exclude_keys1 + exclude_keys2))
+        exclude_keys = list(set(exclude_keys4))
         
         total_data = np.load(data_path, allow_pickle=True).item()
         
@@ -229,15 +235,15 @@ if __name__ == "__main__" :
         
         test_keys  = [data_keys_list[i] for i in test_idx]
         
-        result_path = pathlib.Path("results") / f"{args.model_type}_{train_percent*10}_seed_{args.seed}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        result_path = pathlib.Path("results") /"Final_Model"/ f"{args.model_type}_{train_percent*10}_seed_{args.seed}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         
         # 학습진행
-        dataset = VEPDataset(output_path=data_path, test_key=test_keys, exclude_keys=exclude_keys)
-        train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, save_path=result_path)
+        # dataset = VEPDataset(output_path=data_path, test_key=test_keys, exclude_keys=exclude_keys)
+        # train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, save_path=result_path)
         
         # 테스트 진행
-        # model_path = rf'./results/SHCNN_70_20250418_174021'
+        result_path = rf'./results/Final_Model/SHCNN_70_seed_2025_20250508_141201'
         
         result_dict_list = []
         for test_key in test_keys:

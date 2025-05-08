@@ -4,6 +4,7 @@ import numpy as np
 import logging
 import csv
 import json
+import copy
 
 import torch
 import torch.nn as nn
@@ -36,12 +37,13 @@ class BaseCNN():
         self.input_scaler = None
         self.output_scaler = None
         
-    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, save_path:str ):
+    def train(self, dataset, n_epochs:int, batch_size:int, lr:float, save_path:str , save_interval:int=200):
         
     
-        train_dataset, val_dataset, input_scaler, output_scaler= dataset.get_datasets()
+        train_dataset, val_dataset, input_scaler_shape, input_scaler_linear, output_scaler= dataset.get_datasets()
 
-        self.input_scaler = input_scaler
+        self.input_scaler_shape = input_scaler_shape
+        self.input_scaler_linear = input_scaler_linear
         self.output_scaler = output_scaler
 
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=False)
@@ -98,9 +100,16 @@ class BaseCNN():
                 
                 if best_val_loss > total_val_loss:
                     best_val_loss = total_val_loss
-                    
-                    self.save(current_out_path)
+                    best_model_weights = copy.deepcopy(self.model.state_dict())
+                    # self.save(current_out_path)
                     logger.debug(f"Best model updated: {best_val_loss}, updated model saved in {current_out_path}")
+                
+                # Optionally save best every `save_interval` epochs
+                if (epoch + 1) % save_interval == 0:
+                    self.model.load_state_dict(best_model_weights)
+                    self.save(current_out_path)
+                    logger.debug(f"Saved intermediate best model at epoch {epoch + 1}: {best_val_loss}")
+
 
                 # scheduler.step()
 
@@ -115,7 +124,6 @@ class BaseCNN():
     def predict(self, inputs):
         self.model.eval()
         with torch.no_grad():
-            input_unscaled = self.input_scaler.inverse_transform(inputs)
             inputs = inputs.to(self.device)
             outputs = self.forward(inputs)
             outputs = outputs.detach().cpu().numpy()
@@ -130,7 +138,8 @@ class BaseCNN():
             
     def save(self, path):
         torch.save(self.model.state_dict(), os.path.join(path, "model.pth"))
-        torch.save(self.input_scaler, os.path.join(path, "input_scaler.pth"))
+        torch.save(self.input_scaler_shape, os.path.join(path, "input_scaler_shape.pth"))
+        torch.save(self.input_scaler_linear, os.path.join(path, "input_scaler_linear.pth"))
         torch.save(self.output_scaler, os.path.join(path, "output_scalers.pth"))
         json.dump(self.hparams, open(os.path.join(path, "hparams.json"), "w"))
         
@@ -139,7 +148,8 @@ class BaseCNN():
         hparams = json.load(open(os.path.join(path, "hparams.json"), "r"))
         model = cls(**hparams, device=device)
         model.model.load_state_dict(torch.load(os.path.join(path, "model.pth")))
-        model.input_scaler = torch.load(os.path.join(path, "input_scaler.pth"))
+        model.input_scaler_shape = torch.load(os.path.join(path, "input_scaler_shape.pth"))
+        model.input_scaler_linear = torch.load(os.path.join(path, "input_scaler_linear.pth"))
         model.output_scaler = torch.load(os.path.join(path, "output_scalers.pth"))
         
         return model
@@ -152,7 +162,8 @@ class SHCNN(BaseCNN):
         BN_momentum: float,
         dropout_rate: float,
         start_ch: int,
-        embedding_dim: int,
+        embedding_dim1: int,
+        embedding_dim2: int,
         activation: str = "SiLU",
     ):
         self.device = device
@@ -162,13 +173,15 @@ class SHCNN(BaseCNN):
             "BN_momentum": BN_momentum,
             "dropout_rate": dropout_rate,
             "start_ch": start_ch,
-            "embedding_dim": embedding_dim,
+            "embedding_dim1": embedding_dim1,
+            "embedding_dim2": embedding_dim2,
             "activation": activation,
         }
         
         self.model = SHCNN_(**self.hparams).to(device)
         
-        self.input_scaler = None
+        self.input_scaler_shape = None
+        self.input_scaler_linear = None
         self.output_scaler = None
         
 class DWCNN(BaseCNN):
