@@ -2,7 +2,7 @@ import os
 import matplotlib.pyplot as plt
 from source.polynomial_reg import *
 from source import calculate_wmape
-__all__ = ['results_extraction'] 
+__all__ = ['results_extraction', 'inference_results_extraction'] 
 
 def results_extraction(input_data_unscaled, prediction, gt_output, pred_percentages:list, save_path:str):
     
@@ -64,6 +64,53 @@ def results_extraction(input_data_unscaled, prediction, gt_output, pred_percenta
     return wmpae_per_percent_list, wmape_full_range_list
     
     
+    
+def inference_results_extraction(input_data_unscaled, prediction, bush_name, save_path:str):
+    
+    x_disp, z_disp, theta_x = get_extrapolation_range(input_data_unscaled[:,:8])
+    input_data_unscaled = np.hstack((input_data_unscaled, x_disp.reshape(-1, 1), z_disp.reshape(-1, 1), theta_x.reshape(-1,1))) 
+    
+    sub_axes_inverse = input_data_unscaled[:,-2]
+    main_axes_inverse = input_data_unscaled[:,-1]
+
+    grid_x, grid_y = np.meshgrid(np.linspace(0, sub_axes_inverse*0.7, 16),
+                                np.linspace(0, main_axes_inverse*0.7, 16))
+    
+    grid_x1, grid_y1 = np.meshgrid(np.linspace(0, sub_axes_inverse, 25),
+                                np.linspace(0, main_axes_inverse, 25))
+
+    train_X = np.column_stack([grid_x.ravel(), grid_y.ravel()])
+
+    train_X1 = np.column_stack([grid_x1.ravel(), grid_y1.ravel()])
+    
+    optimal_degree = loocv_optimization(train_X, prediction[:,:].flatten())
+    poly_model, poly = polynomial_regression(train_X, prediction[:,:].flatten(), optimal_degree)
+
+    Z_pred = predict_on_grid(poly_model, poly, train_X1)
+    Z_pred = Z_pred.reshape(25, 25)
+    
+    # Save Z_pred, grid_x1, and grid_y1 as CSV
+    output_csv_path = os.path.join(save_path, f'Stiffness_Surface.csv')
+    with open(output_csv_path, 'w') as f:
+        f.write('F,x,y\n')
+        for i in range(25):
+            for j in range(25):
+                f.write(f"{Z_pred[i, j]},{grid_x1[i, j]},{grid_y1[i, j]}\n")
+    print(f"Saved CSV: {output_csv_path}")
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(grid_x1, grid_y1, Z_pred, color='red', alpha=0.7, label=f'prediction')
+    ax.set_xlabel('SubAxes')
+    ax.set_ylabel('MainAxes')
+    ax.set_zlabel('Value')
+    # plt.legend()
+    img_path = os.path.join(save_path, f'Stiffness_Surface.png')
+    plt.savefig(img_path, dpi=300)
+    print(f"Saved: {img_path}")    
+    
+    
+
 def get_extrapolation_range(df):
 
     df = np.array(df, dtype=np.float64)

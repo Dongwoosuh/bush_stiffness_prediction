@@ -39,19 +39,17 @@ class BushDataset(Dataset):
     """
     부시별 input, output을 Dataset으로 감싸는 예시
     """
-    def __init__(self, inputs, outputs):
+    def __init__(self, inputs):
         super().__init__()
         self.inputs = inputs  # shape: (N, feature_dim) 또는 object
-        self.outputs = outputs
         
     def __len__(self):
         return len(self.inputs)
 
     def __getitem__(self, idx):
         x = self.inputs[idx]
-        y = self.outputs[idx]
 
-        return x, y
+        return x
 
 class VEPDataset():
     def __init__(self, output_path:str, test_key:str, exclude_keys:list=None):
@@ -158,45 +156,25 @@ class VEPDataset():
         return train_data, test_data
     
 class InferenceVEPDataset():
-    def __init__(self, output_path:str, test_key:str):
-        self.test_key = test_key
-        self.total_data = np.load(output_path, allow_pickle=True).item()
+    def __init__(self, csv_path: str):
         
-        train_data, test_data = self.get_test_keys(test_key)
-        
-        # (2) load_bush_data로 bush_names, inputs, outputs 추출
-        _, train_inputs, train_outputs = load_bush_data(train_data)
-        _, test_inputs, test_outputs = load_bush_data(test_data)
-        
-        # 기하적 최대범위 추가가
-        x_disp, z_disp, theta_x = get_extrapolation_range(train_inputs[:,:8])
-        train_inputs = np.hstack((train_inputs, x_disp.reshape(-1, 1), z_disp.reshape(-1, 1), theta_x.reshape(-1,1))) 
-        
-        train_inputs = np.array([np.asarray(i, dtype=np.float32) for i in train_inputs])
-        train_inputs[:, 8:14] = np.log1p(train_inputs[:, 8:14])
-        
-        
-        train_outputs = np.array([np.asarray(o, dtype=np.float32) for o in train_outputs])
-        train_outputs = np.log1p(train_outputs)
-        
-        test_outputs = np.array([np.asarray(o, dtype=np.float32) for o in test_outputs])
-        test_outputs = np.log1p(test_outputs)
-        
-        
-        # Placeholders for dynamic updates
-        self.np_train_input = train_inputs
-        self.np_train_output = train_outputs
-        self.np_test_input = test_inputs
-        self.np_test_output = test_outputs
-        self.input_scaler = None
-        self.output_scaler = None
+        # Load CSV data
+        df = pd.read_csv(csv_path)
 
+        # Extract columns for input_data_shape and input_data_linear
+        input_data_shape = df[['DV1', 'DV2', 'DV3', 'DV4', 'DV5', 'DV6', 'DV7', 'DV8']].values.astype(np.float32)
+        input_data_linear = df[['Stiffness_1', 'Stiffness_2', 'Stiffness_3', 'Stiffness_4', 'Stiffness_5', 'Stiffness_6']].values.astype(np.float32)
 
+        # Combine into a single numpy array
+        input_data = np.hstack((input_data_shape, input_data_linear))
+        inference_name = csv_path.split('/')[-1].split('.')[0]  # Extract name before .csv
         
+        self.input_data = input_data
+        self.inference_name = inference_name
 
 def get_extrapolation_range(df):
 
-    df = np.array(df, dtype=np.float64)
+    df = np.array(df, dtype=np.float32)
 
     scale_factor = 1.0487
     # Calculate rubber parameters
