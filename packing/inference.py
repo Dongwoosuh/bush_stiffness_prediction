@@ -568,21 +568,6 @@ def model_test(
                 os.makedirs(save_path)
             
             inference_results_extraction(test_inputs_shape_unscaled, prediction[idx_], stiffness_num=stiffness_num, save_path=save_path)
-
-        
-        
-        
-# if __name__ == "__main__" :
-
-#     # 테스트 진행
-#     model_type = "SHCNN"
-#     model_path = rf'./model/SHCNN_70_seed_2025_20250508_141201'
-#     result_path = rf'./results/Inference'
-
-#     dv_path = rf'./resource/inference_example/example.csv'
-#     dataset = InferenceVEPDataset(csv_path=dv_path)
-#     result_dict = model_test(model_type, dataset=dataset, model_path=rf'{model_path}', result_path=result_path)
-            
             
 # ---------------------- Main Function ----------------------
 def main():
@@ -593,9 +578,6 @@ def main():
         required=True,
         help="Path to the input CSV file for inference."
     )
-    # (선택) 모델 경로나 결과 저장 경로도 인자로 받고 싶다면 추가로 정의할 수 있습니다.
-    # parser.add_argument("--model_path", default="./model/SHCNN_70_seed_2025_20250508_141201", help="Path to the trained model directory.")
-    # parser.add_argument("--result_path", default="./results/Inference", help="Directory where to save inference results.")
 
     args = parser.parse_args()
 
