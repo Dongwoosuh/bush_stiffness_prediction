@@ -144,9 +144,9 @@ class SHCNN_(BaseMLP):
                 num_DV=17,
                 dropout_rate=0.1, 
                 BN_momentum = 0.1,
-                start_ch = 1024,
-                embedding_dim1=128,
-                embedding_dim2=128,
+                start_ch = 2048,
+                embedding_dim1=1024,
+                embedding_dim2=1024,
                 # embedding_dim3=128,
                 activation='SiLU'
                 ):
@@ -154,7 +154,7 @@ class SHCNN_(BaseMLP):
 
         self.padding_param = 0
         self.kernel_size = 3
-        self.stride = 2
+        self.stride = 1
         self.embedding_dim1 = embedding_dim1
         self.embedding_dim2 = embedding_dim2
         self.start_ch = start_ch 
@@ -171,20 +171,20 @@ class SHCNN_(BaseMLP):
             self.get_activation(activation),
             nn.Linear(self.embedding_dim1, self.embedding_dim1),
             # nn.SiLU(inplace=True),
-            # nn.Dropout(dropout_rate)
+            nn.Dropout(dropout_rate)
         )
         self.embed2 = nn.Sequential(
             nn.Linear(seg2_dim, self.embedding_dim2),
             nn.BatchNorm1d(self.embedding_dim2, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.Linear(self.embedding_dim2, self.embedding_dim2),
-            # nn.Dropout(dropout_rate)
+            nn.Dropout(dropout_rate)
         )
         self.embed3 = nn.Sequential(
             nn.Linear(seg3_dim, self.embedding_dim1),
             nn.BatchNorm1d(self.embedding_dim1, momentum=self.BN_momentum),
             self.get_activation(activation),
-            # nn.Dropout(dropout_rate)
+            nn.Dropout(dropout_rate)
             )
 
         embed_total_dim =  self.embedding_dim1 + self.embedding_dim2
@@ -194,7 +194,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.Linear(self.start_ch * 2 * 2, self.start_ch * 2 * 2),
-            # nn.Dropout(self.dropout_rate)
+            nn.Dropout(self.dropout_rate)
             
         )
 
@@ -203,65 +203,60 @@ class SHCNN_(BaseMLP):
                                  stride=self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 2, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 2, kernel_size=self.kernel_size, 
-                                 stride=1, padding=self.padding_param),
+                                 stride= self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 2, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
+            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
             nn.Dropout(dropout_rate),
 
             nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 4, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 4, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 4, kernel_size=self.kernel_size, 
-                                 stride=1, padding=self.padding_param),
+                                 stride=self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 4, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
+            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
             nn.Dropout(dropout_rate),
 
             nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 8, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 8, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 8, kernel_size=self.kernel_size, 
-                                 stride=1, padding=self.padding_param),
+                                 stride=self.stride, padding=self.padding_param),
             nn.BatchNorm2d(self.start_ch // 8, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
+            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
             nn.Dropout(dropout_rate),
 
             nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 16, kernel_size=3, 
                                  stride=self.stride, padding=0),
             nn.BatchNorm2d(self.start_ch // 16, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 16, kernel_size=3, 
-                                 stride=1, padding=0),
+                                 stride=self.stride, padding=0),
             nn.BatchNorm2d(self.start_ch // 16, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.AvgPool2d(3, stride=2, padding=0, count_include_pad=False),
+            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
             nn.Dropout(dropout_rate),
 
             nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 32, kernel_size=3, 
                                  stride=self.stride, padding=0),
             nn.BatchNorm2d(self.start_ch // 32, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.Dropout(self.dropout_rate),
             nn.ConvTranspose2d(self.start_ch // 32, self.start_ch // 32, kernel_size=3, 
-                                 stride=1, padding=0),
+                                 stride=self.stride, padding=0),
             nn.BatchNorm2d(self.start_ch // 32, momentum=self.BN_momentum),
             self.get_activation(activation),
-            nn.AvgPool2d(3, stride=2, padding=1,count_include_pad=False),
+            nn.AvgPool2d(3, stride=1, padding=1,count_include_pad=False),
             nn.Dropout(dropout_rate),
         )
 
         self.conv_last = nn.Sequential(
-            nn.ConvTranspose2d(self.start_ch // 32, 6, kernel_size=4, stride=self.stride, padding=1),
+            nn.ConvTranspose2d(self.start_ch // 32, 6, kernel_size=3, stride=self.stride, padding=0),
             nn.Flatten(),
             nn.Linear(in_features=6 * 16 * 16, out_features=6 * 16 * 16),
         )
