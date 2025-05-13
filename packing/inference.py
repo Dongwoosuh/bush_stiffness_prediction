@@ -1,14 +1,12 @@
 import os
+import sys
 import argparse
 import logging
 import json
 import torch
-import datetime
-import pathlib
 import pandas as pd
 import numpy as np
 import tkinter as tk
-from tkinter import filedialog
 
 import torch
 import torch.nn as nn
@@ -19,8 +17,10 @@ from sklearn.linear_model import LinearRegression
 from torch.utils.data import DataLoader, Dataset
 import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
+import warnings
+from sklearn.exceptions import InconsistentVersionWarning
 
+warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
 
 
@@ -158,7 +158,7 @@ def get_extrapolation_range(df):
     return x_disp, z_disp, theta_x
 
 
-def inference_results_extraction(input_data_unscaled, prediction, bush_name, save_path:str):
+def inference_results_extraction(input_data_unscaled, prediction, stiffness_num, save_path:str):
     
     x_disp, z_disp, theta_x = get_extrapolation_range(input_data_unscaled[:,:8])
     input_data_unscaled = np.hstack((input_data_unscaled, x_disp.reshape(-1, 1), z_disp.reshape(-1, 1), theta_x.reshape(-1,1))) 
@@ -182,14 +182,14 @@ def inference_results_extraction(input_data_unscaled, prediction, bush_name, sav
     Z_pred = predict_on_grid(poly_model, poly, train_X1)
     Z_pred = Z_pred.reshape(25, 25)
     
-    # Save Z_pred, grid_x1, and grid_y1 as CSV
-    output_csv_path = os.path.join(save_path, f'Stiffness_Surface.csv')
-    with open(output_csv_path, 'w') as f:
-        f.write('F,x,y\n')
-        for i in range(25):
-            for j in range(25):
-                f.write(f"{Z_pred[i, j]},{grid_x1[i, j]},{grid_y1[i, j]}\n")
-    print(f"Saved CSV: {output_csv_path}")
+    # # Save Z_pred, grid_x1, and grid_y1 as CSV
+    # output_csv_path = os.path.join(save_path, f'Stiffness_Surface.csv')
+    # with open(output_csv_path, 'w') as f:
+    #     f.write('F,x,y\n')
+    #     for i in range(25):
+    #         for j in range(25):
+    #             f.write(f"{Z_pred[i, j]},{grid_x1[i, j]},{grid_y1[i, j]}\n")
+    # print(f"Saved CSV: {output_csv_path}")
     
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -201,6 +201,86 @@ def inference_results_extraction(input_data_unscaled, prediction, bush_name, sav
     img_path = os.path.join(save_path, f'Stiffness_Surface.png')
     plt.savefig(img_path, dpi=300)
     print(f"Saved: {img_path}")    
+    
+    ## 대칭이동 시키기
+    # 주축기준 대칭이동
+    # grid_x1, grid_y1, Z_pred를 1차원 배열로 펼침 (총 625개 점)
+    grid_x1_flat = grid_x1.ravel()
+    grid_y1_flat = grid_y1.ravel()
+    Z_pred_flat = Z_pred.ravel()
+    
+    grid_x1_flat_sym = -grid_x1_flat
+    grid_y1_flat_sym = grid_y1_flat
+    Z_pred_flat_sym = Z_pred_flat
+    # Concatenate original and symmetric points
+    grid_x2 = np.concatenate((grid_x1_flat, grid_x1_flat_sym))
+    grid_y2 = np.concatenate((grid_y1_flat, grid_y1_flat_sym))
+    Z_pred2 = np.concatenate((Z_pred_flat, Z_pred_flat_sym))
+
+    # Remove duplicate (x, y) points, keeping the first occurrence
+    coords = np.column_stack((grid_x2, grid_y2))
+    _, unique_indices = np.unique(coords, axis=0, return_index=True)
+    unique_indices_sorted = np.sort(unique_indices)  # Keep order of first appearance
+
+    grid_x2 = grid_x2[unique_indices_sorted]
+    grid_y2 = grid_y2[unique_indices_sorted]
+    Z_pred2 = Z_pred2[unique_indices_sorted]
+    
+    grid_x2_sym = grid_x2
+    grid_y2_sym = -grid_y2
+    Z_pred2_sym = -Z_pred2
+    
+    grid_x3 = np.concatenate((grid_x2, grid_x2_sym))
+    grid_y3 = np.concatenate((grid_y2, grid_y2_sym))
+    Z_pred3 = np.concatenate((Z_pred2, Z_pred2_sym))
+    
+    if stiffness_num == 1 or stiffness_num == 2 or stiffness_num == 3:
+        # Save Z_pred3, grid_x3, and grid_y3 as CSV
+        output_csv_path_sym = os.path.join(save_path, f'Stiffness_Surface.csv')
+        with open(output_csv_path_sym, 'w') as f:
+            f.write('F,x,y\n')
+            for i in range(len(grid_x3)):
+                f.write(f"{Z_pred3[i]},{grid_y3[i]},{grid_x3[i]}\n")
+        print(f"Saved CSV: {output_csv_path_sym}")
+
+        # Save as TXT
+        output_txt_path_sym = os.path.join(save_path, f'Stiffness_Surface.txt')
+        with open(output_txt_path_sym, 'w') as f:
+            f.write('F,x,y\n')
+            for i in range(len(grid_x3)):
+                f.write(f"{Z_pred3[i]},{grid_y3[i]},{grid_x3[i]}\n")
+        print(f"Saved TXT: {output_txt_path_sym}")
+
+    elif stiffness_num == 4 or stiffness_num == 5 or stiffness_num == 6:
+        # Save Z_pred3, grid_x3, and grid_y3 as CSV
+        output_csv_path_sym = os.path.join(save_path, f'Stiffness_Surface.csv')
+        with open(output_csv_path_sym, 'w') as f:
+            f.write('F,x,y\n')
+            for i in range(len(grid_x3)):
+                f.write(f"{Z_pred3[i]},{grid_x3[i]},{grid_y3[i]}\n")
+        print(f"Saved CSV: {output_csv_path_sym}")
+
+        # Save as TXT
+        output_txt_path_sym = os.path.join(save_path, f'Stiffness_Surface.txt')
+        with open(output_txt_path_sym, 'w') as f:
+            f.write('F,x,y\n')
+            for i in range(len(grid_x3)):
+                f.write(f"{Z_pred3[i]},{grid_x3[i]},{grid_y3[i]}\n")
+        print(f"Saved TXT: {output_txt_path_sym}")
+        
+    # Plot the symmetric surface
+    fig_sym = plt.figure()
+    ax_sym = fig_sym.add_subplot(111, projection='3d')
+    # Create a scatter plot for the symmetric data
+    ax_sym.scatter(grid_x3, grid_y3, Z_pred3, c=Z_pred3, cmap='viridis', alpha=0.7)
+    ax_sym.set_xlabel('SubAxes')
+    ax_sym.set_ylabel('MainAxes')
+    ax_sym.set_zlabel('Value')
+    img_path_sym = os.path.join(save_path, f'Stiffness_Surface_Final.png')
+    plt.savefig(img_path_sym, dpi=300)
+    plt.close(fig_sym)
+    print(f"Saved: {img_path_sym}")
+    
 #############################################
 
 ########## Model Definition ##########
@@ -482,12 +562,12 @@ def model_test(
         prediction = np.expm1(prediction.reshape(-1,16,16))
         
         for idx_ in range(6):
-            
+            stiffness_num = idx_ + 1
             save_path = os.path.join(bush_save_path, f'stiffness_{idx_+1}')
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             
-            inference_results_extraction(test_inputs_shape_unscaled, prediction[idx_], bush_name= test_key[0], save_path=save_path)
+            inference_results_extraction(test_inputs_shape_unscaled, prediction[idx_], stiffness_num=stiffness_num, save_path=save_path)
 
         
         
@@ -506,40 +586,39 @@ def model_test(
             
 # ---------------------- Main Function ----------------------
 def main():
+    # 1) 커맨드라인 인자 파싱
+    parser = argparse.ArgumentParser(description="Run SHCNN inference on a given CSV file.")
+    parser.add_argument(
+        "--csv_path",
+        required=True,
+        help="Path to the input CSV file for inference."
+    )
+    # (선택) 모델 경로나 결과 저장 경로도 인자로 받고 싶다면 추가로 정의할 수 있습니다.
+    # parser.add_argument("--model_path", default="./model/SHCNN_70_seed_2025_20250508_141201", help="Path to the trained model directory.")
+    # parser.add_argument("--result_path", default="./results/Inference", help="Directory where to save inference results.")
 
+    args = parser.parse_args()
 
+    # 2) 파일 존재 여부 확인
+    if not os.path.isfile(args.csv_path):
+        print(f"❌ 오류: 지정된 CSV 파일을 찾을 수 없습니다: {args.csv_path}")
+        sys.exit(1)
 
-    while True:
-        # 파일 선택
-        root = tk.Tk()
-        root.withdraw()
-        dv_path = filedialog.askopenfilename(title="Select CSV File", filetypes=[("CSV", "*.csv")])
+    # 3) 테스트 설정
+    model_type  = "SHCNN"
+    model_path  = "./model/SHCNN_70_seed_2025_20250508_141201"
+    result_path = "./results/Inference"
 
-        # 파일이 선택되지 않거나 존재하지 않음
-        if not dv_path or not os.path.exists(dv_path):
-            print("❌ 선택한 CSV 파일이 없습니다.")
-            retry = input("계속 진행하시겠습니까? (y/n): ").strip().lower()
-            if retry != "y":
-                print("프로그램을 종료합니다.")
-                break
-            else:
-                continue
+    # 만약 이 역시 인자로 받고 싶다면 위에서 parser에 정의한 args.model_path, args.result_path를 사용하세요.
 
-        # 테스트 설정
-        model_type = "SHCNN"
-        model_path = rf'./model/SHCNN_70_seed_2025_20250508_141201'
-        result_path = rf'./results/Inference'
-
-        # 테스트 실행
-        dataset = InferenceVEPDataset(csv_path=dv_path)
-        model_test(model_type, dataset=dataset, model_path=model_path, result_path=result_path)
-
-        # 반복 여부 확인
-        again = input("✅ 테스트를 한 번 더 진행하시겠습니까? (y/n): ").strip().lower()
-        if again != "y":
-            print("프로그램을 종료합니다.")
-            break
-
+    # 4) 데이터셋 및 테스트 실행
+    dataset = InferenceVEPDataset(csv_path=args.csv_path)
+    model_test(
+        model_type=model_type,
+        dataset=dataset,
+        model_path=model_path,
+        result_path=result_path
+    )
 
 if __name__ == "__main__":
     main()
