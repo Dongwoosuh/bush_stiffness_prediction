@@ -146,11 +146,11 @@ def model_test(
     output_scaler = model.output_scaler
     
     test_inputs = dataset.np_test_input
-    test_inputs_shape_unscaled = test_inputs[:,:8]
+    test_inputs_shape_unscaled = test_inputs[:,:14]
     
-    test_inputs_shape = input_scaler_shape.transform(test_inputs[:,:8])
-    test_inputs_linear = input_scaler_linear.transform(test_inputs[:,8:14].flatten().reshape(-1,1))
-    test_inputs_linear = test_inputs_linear.reshape(test_inputs[:,8:14].shape)
+    test_inputs_shape = input_scaler_shape.transform(test_inputs[:,:14])
+    test_inputs_linear = input_scaler_linear.transform(test_inputs[:,14:].flatten().reshape(-1,1))
+    test_inputs_linear = test_inputs_linear.reshape(test_inputs[:,14:].shape)
     
     test_inputs = np.hstack((test_inputs_shape, test_inputs_linear))
     test_outputs = dataset.np_test_output
@@ -164,9 +164,14 @@ def model_test(
     result_df = pd.DataFrame(columns=["stiffness_num", "100%"])
     for idx, (inputs, outputs) in enumerate(test_loader):
         prediction = model.predict(inputs) # input은 스케일이 이미 된 상태로 들어옴
-        prediction = np.expm1(prediction.reshape(-1,16,16))
         
-        gt_output = outputs.numpy().reshape(-1,16,16) # output은 굳이 스케일링해서 넣을 필요 없음
+        sign = np.sign(prediction)
+        prediction = prediction * sign 
+        prediction = np.expm1(prediction.reshape(-1,31,31)) # 예측값은 스케일링이 되어있음. expm1을 통해 원래 값으로 되돌림
+        prediction = prediction * sign # 음수값을 다시 원래대로 돌려놓음
+        # prediction = np.expm1(prediction.reshape(-1,31,31))
+        
+        gt_output = outputs.numpy().reshape(-1,31,31) # output은 굳이 스케일링해서 넣을 필요 없음
         
         for idx_ in range(len(gt_output)):
             
@@ -204,18 +209,20 @@ if __name__ == "__main__" :
     
     train_percents = [7]
     for train_percent in train_percents:
-        data_path = f"./resource/250426/combined_{train_percent}.npy" # 데이터 경로
+        data_path = f"./resource/중철_0518/combined_{train_percent}_sym.npy" # 데이터 경로
         
-        result_path = pathlib.Path("results") / f"LOO_Final/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
+        result_path = pathlib.Path("results") / f"중철_검토/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
         test_keys = [
                     # '06_04_NX4', '06_05_NX4', 
-                    'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK',
-                    'G_08_06_IK', 
+                    # 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK',
+                    # 'G_08_06_IK', 
                     # 'G_09_05_IK', 'G_10_03_IK', 'G_11_01_IK',
                     # 'G_11_06_IK', 'G_12_05_IK', 
                     # 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
                     # '06_11_MQ4',
-                    'B_02', 'B_05'
+                    # 'B_02', 'B_05',
+                    "Run1_M", 
+                    # "Run21_M", "Run24_M", "Run25_M", "Run26_M", "Run33_M", "Run35_M", 
                     ] # 현대차 부싱 이름들
         
         exclude_key4 = ['Run92', 'Run89', 'Run88', 'Run154', 'Run83', 'Run128', 'Run81', 'Run37',
@@ -227,17 +234,17 @@ if __name__ == "__main__" :
         exclude_keys = list(set(exclude_key4))
         
         # 학습진행
-        for test_key in test_keys:
-            dataset = VEPDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
-            train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
+        # for test_key in test_keys:
+        #     dataset = IntegrateDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
+        #     train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
-    model_path = rf'./results/Compare/20250429_144251_SHCNN_70'
-    model_path = result_path
+    model_path = rf'./results/중철_검토/20250519_165904_SHCNN_70'
+    # model_path = result_path
     
     result_dict_list = []
     for test_key in test_keys:
-        dataset = VEPDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
+        dataset = IntegrateDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
         result_dict = model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'{model_path}/{test_key}')
         result_dict_list.append(result_dict)
         

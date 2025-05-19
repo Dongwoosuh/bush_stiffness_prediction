@@ -161,8 +161,8 @@ class SHCNN_(BaseMLP):
         self.dropout_rate = dropout_rate
         self.BN_momentum = BN_momentum
         
-        seg1_dim = 8
-        seg2_dim = 6
+        seg1_dim = 14
+        seg2_dim = 1
         seg3_dim = num_DV - 14
 
         self.embed1 = nn.Sequential(
@@ -255,16 +255,25 @@ class SHCNN_(BaseMLP):
             nn.Dropout(dropout_rate),
         )
 
+        # self.conv_last = nn.Sequential(
+        #     nn.ConvTranspose2d(self.start_ch // 32, 1, kernel_size=3, stride=self.stride, padding=0),
+        #     nn.Flatten(),
+        #     nn.Linear(in_features=1 * 31 * 31, out_features=1 * 31 * 31),
+        # )
+        
         self.conv_last = nn.Sequential(
-            nn.ConvTranspose2d(self.start_ch // 32, 6, kernel_size=3, stride=self.stride, padding=0),
+            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=0, output_padding=1),  # 14→30
+            nn.BatchNorm2d(32, momentum=self.BN_momentum),
+            # self.get_activation(activation),
+            nn.ConvTranspose2d(32, 1, kernel_size=3, stride=1, padding=1),  # 30→30
+            nn.Upsample(size=(31, 31), mode='bilinear', align_corners=False), # 여기!
             nn.Flatten(),
-            nn.Linear(in_features=6 * 16 * 16, out_features=6 * 16 * 16),
         )
 
     def forward(self, input):
 
-        seg1 = input[:, :8]      
-        seg2 = input[:, 8:14]      
+        seg1 = input[:, :14]      
+        seg2 = input[:, 14:]      
         # seg3 = input[:, 14:]   
 
         emb1 = self.embed1(seg1)   
@@ -277,7 +286,7 @@ class SHCNN_(BaseMLP):
         x = self.fc(x_embed)  
         x = x.view(-1, self.start_ch, 2, 2)
         x = self.conv5(x)
-        x = self.conv_last(x).view(-1, 6, 16, 16)
+        x = self.conv_last(x).view([-1,1,31,31]) # (batch_size, 1, 31, 31)  
         return x
     
     
@@ -286,5 +295,5 @@ class SHCNN_(BaseMLP):
     
 if __name__ == "__main__": 
     model = SHCNN_(num_DV=17, dropout_rate=0.1, BN_momentum=0.1)
-    summary = pytorch_model_summary.summary(model, torch.zeros(10, 17), show_input=True)
+    summary = pytorch_model_summary.summary(model, torch.zeros(10, 15), show_input=True)
     print(summary)
