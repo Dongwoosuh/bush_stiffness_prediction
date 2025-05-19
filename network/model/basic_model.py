@@ -140,155 +140,93 @@ class CNN_small_dropout(nn.Module):
         return x
     
 class SHCNN_(BaseMLP):
-    def __init__(self, 
-                num_DV=17,
-                dropout_rate=0.1, 
-                BN_momentum = 0.1,
-                start_ch = 2048,
-                embedding_dim1=1024,
-                embedding_dim2=1024,
-                # embedding_dim3=128,
-                activation='SiLU'
-                ):
-        super(SHCNN_, self).__init__()
+    """설계변수 14 (or 17) → (B, 1, 31, 31) 맵핑."""
 
-        self.padding_param = 0
-        self.kernel_size = 3
-        self.stride = 1
-        self.embedding_dim1 = embedding_dim1
-        self.embedding_dim2 = embedding_dim2
-        self.start_ch = start_ch 
+    def __init__(
+        self,
+        num_DV: int = 17,
+        dropout_rate: float = 0.1,
+        BN_momentum: float = 0.1,
+        start_ch: int = 2048,
+        embedding_dim1: int = 512,
+        embedding_dim2: int = 512,
+        activation: str = "ELU",
+    ) -> None:
+        super(SHCNN_,self).__init__()
+
+        # ────────────── 입력 임베딩 ──────────────
+        seg1_dim, seg2_dim = 14, 1
+        act = self.get_activation(activation)
+        self.start_ch = start_ch
         self.dropout_rate = dropout_rate
         self.BN_momentum = BN_momentum
+        self.embed1_dim1 = embedding_dim1
+        self.embed2_dim2 = embedding_dim2
         
-        seg1_dim = 14
-        seg2_dim = 1
-        seg3_dim = num_DV - 14
-
-        self.embed1 = nn.Sequential(
-            nn.Linear(seg1_dim, self.embedding_dim1),
-            nn.BatchNorm1d(self.embedding_dim1, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.Linear(self.embedding_dim1, self.embedding_dim1),
-            # nn.SiLU(inplace=True),
-            nn.Dropout(dropout_rate)
-        )
-        self.embed2 = nn.Sequential(
-            nn.Linear(seg2_dim, self.embedding_dim2),
-            nn.BatchNorm1d(self.embedding_dim2, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.Linear(self.embedding_dim2, self.embedding_dim2),
-            nn.Dropout(dropout_rate)
-        )
-        self.embed3 = nn.Sequential(
-            nn.Linear(seg3_dim, self.embedding_dim1),
-            nn.BatchNorm1d(self.embedding_dim1, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.Dropout(dropout_rate)
+        def _embed(in_dim, out_dim):
+            return nn.Sequential(
+                nn.Linear(in_dim, out_dim),
+                nn.BatchNorm1d(out_dim, momentum=self.BN_momentum),
+                act,
+                nn.Linear(out_dim, out_dim),
+                nn.BatchNorm1d(out_dim, momentum=self.BN_momentum),
+                act,
+                nn.Dropout(self.dropout_rate),
             )
 
-        embed_total_dim =  self.embedding_dim1 + self.embedding_dim2
+        self.embed1 = _embed(seg1_dim, self.embed1_dim1)
+        self.embed2 = _embed(seg2_dim, self.embed2_dim2)
 
+        embed_total = self.embed1_dim1 + self.embed2_dim2
+
+        # ────────────── Latent FC ──────────────
         self.fc = nn.Sequential(
-            nn.Linear(in_features=embed_total_dim, out_features=self.start_ch * 2 * 2),
-            nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.Linear(self.start_ch * 2 * 2, self.start_ch * 2 * 2),
-            nn.Dropout(self.dropout_rate)
-            
+            nn.Linear(embed_total, self.start_ch * 4),       # 2×2, C = self.start_ch
+            nn.BatchNorm1d(self.start_ch * 4, momentum=self.BN_momentum),
+            act,
+            nn.Linear(self.start_ch * 4, self.start_ch * 4),
+            nn.BatchNorm1d(self.start_ch * 4, momentum=self.BN_momentum),
+            act,
+            nn.Dropout(self.dropout_rate),
         )
 
-        self.conv5 = nn.Sequential(
-            nn.ConvTranspose2d(self.start_ch, self.start_ch // 2, kernel_size=self.kernel_size, 
-                                 stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 2, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 2, kernel_size=self.kernel_size, 
-                                 stride= self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 2, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout(dropout_rate),
+        # ────────────── 업샘플 블록 ──────────────
+        def UpBlock(in_ch, out_ch):
+            return nn.Sequential(
+                nn.ConvTranspose2d(in_ch, out_ch, kernel_size=4, stride=2, padding=1),  # spatial ×2
+                nn.BatchNorm2d(out_ch, momentum=self.BN_momentum),
+                act,
+                nn.Conv2d(out_ch, out_ch, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm2d(out_ch, momentum=self.BN_momentum),
+                # act,
+                nn.Dropout2d(self.dropout_rate),
+            )
 
-            nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 4, kernel_size=self.kernel_size, 
-                                 stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 4, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 4, kernel_size=self.kernel_size, 
-                                 stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 4, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout(dropout_rate),
+        self.up1 = UpBlock(self.start_ch,       self.start_ch // 2)   # 2 → 4
+        self.up2 = UpBlock(self.start_ch // 2,  self.start_ch // 4)   # 4 → 8
+        self.up3 = UpBlock(self.start_ch // 4,  self.start_ch // 8)   # 8 → 16
+        self.up4 = UpBlock(self.start_ch // 8,  self.start_ch // 16)  # 16 → 32  ← 추가
 
-            nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 8, kernel_size=self.kernel_size, 
-                                 stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 8, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 8, kernel_size=self.kernel_size, 
-                                 stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 8, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout(dropout_rate),
+        # ────────────── 최종 1-채널 투영 ──────────────
+        self.to_out = nn.Conv2d(self.start_ch // 16, 1, kernel_size=3, stride=1, padding=1)
 
-            nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 16, kernel_size=3, 
-                                 stride=self.stride, padding=0),
-            nn.BatchNorm2d(self.start_ch // 16, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 16, kernel_size=3, 
-                                 stride=self.stride, padding=0),
-            nn.BatchNorm2d(self.start_ch // 16, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout(dropout_rate),
+    # ────────────── Forward ──────────────
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        seg1, seg2 = x[:, :14], x[:, 14:]
 
-            nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 32, kernel_size=3, 
-                                 stride=self.stride, padding=0),
-            nn.BatchNorm2d(self.start_ch // 32, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.ConvTranspose2d(self.start_ch // 32, self.start_ch // 32, kernel_size=3, 
-                                 stride=self.stride, padding=0),
-            nn.BatchNorm2d(self.start_ch // 32, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.AvgPool2d(3, stride=1, padding=1,count_include_pad=False),
-            nn.Dropout(dropout_rate),
-        )
+        emb1 = self.embed1(seg1)
+        emb2 = self.embed2(seg2)
+        latent = torch.cat([emb1, emb2], dim=1)          # (B, embed_total)
 
-        # self.conv_last = nn.Sequential(
-        #     nn.ConvTranspose2d(self.start_ch // 32, 1, kernel_size=3, stride=self.stride, padding=0),
-        #     nn.Flatten(),
-        #     nn.Linear(in_features=1 * 31 * 31, out_features=1 * 31 * 31),
-        # )
-        
-        self.conv_last = nn.Sequential(
-            nn.ConvTranspose2d(64, 32, kernel_size=3, stride=2, padding=0, output_padding=1),  # 14→30
-            nn.BatchNorm2d(32, momentum=self.BN_momentum),
-            # self.get_activation(activation),
-            nn.ConvTranspose2d(32, 1, kernel_size=3, stride=1, padding=1),  # 30→30
-            nn.Upsample(size=(31, 31), mode='bilinear', align_corners=False), # 여기!
-            nn.Flatten(),
-        )
+        latent = self.fc(latent).view(-1, self.start_ch, 2, 2)    # (B, 2048, 2, 2)
 
-    def forward(self, input):
+        out = self.up1(latent)   # 4×4
+        out = self.up2(out)      # 8×8
+        out = self.up3(out)      # 16×16
+        out = self.up4(out)      # 32×32
+        out = self.to_out(out)   # (B, 1, 32, 32)
 
-        seg1 = input[:, :14]      
-        seg2 = input[:, 14:]      
-        # seg3 = input[:, 14:]   
-
-        emb1 = self.embed1(seg1)   
-        emb2 = self.embed2(seg2)   
-        # emb3 = self.embed3(seg3)
-
-        x_embed = torch.cat([emb1, emb2], dim=1)  
-
-        # x_embed = emb1 + emb2 + emb3
-        x = self.fc(x_embed)  
-        x = x.view(-1, self.start_ch, 2, 2)
-        x = self.conv5(x)
-        x = self.conv_last(x).view([-1,1,31,31]) # (batch_size, 1, 31, 31)  
-        return x
-    
+        return out[..., :31, :31]  # (B, 1, 31, 31)
     
     
     

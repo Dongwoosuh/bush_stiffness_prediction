@@ -203,7 +203,7 @@ if __name__ == "__main__" :
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_epochs", type=int, default=3000)
     parser.add_argument("--batch_size", type=int, default=256)
-    parser.add_argument("--lr", type=float, default=0.0002)
+    parser.add_argument("--lr", type=float, default=0.0001)
     parser.add_argument("--model_type", type=str, default="SHCNN")
     args = parser.parse_args()
     
@@ -239,7 +239,7 @@ if __name__ == "__main__" :
         #     train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
         
     # 테스트 진행
-    model_path = rf'./results/중철_검토/20250519_165904_SHCNN_70'
+    model_path = rf'./results/중철_검토/20250519_171411_SHCNN_70'
     # model_path = result_path
     
     result_dict_list = []
