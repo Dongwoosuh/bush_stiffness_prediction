@@ -213,16 +213,16 @@ if __name__ == "__main__" :
         
         result_path = pathlib.Path("results") / f"중철_검토/{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{args.model_type}_{train_percent*10}"
         test_keys = [
-                    # '06_04_NX4', '06_05_NX4', 
-                    # 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK',
-                    # 'G_08_06_IK', 
-                    # 'G_09_05_IK', 'G_10_03_IK', 'G_11_01_IK',
-                    # 'G_11_06_IK', 'G_12_05_IK', 
-                    # 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
-                    # '06_11_MQ4',
-                    # 'B_02', 'B_05',
+                    '06_04_NX4', '06_05_NX4', 
+                    'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK',
+                    'G_08_06_IK', 
+                    'G_09_05_IK', 'G_10_03_IK', 'G_11_01_IK',
+                    'G_11_06_IK', 'G_12_05_IK', 
+                    'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
+                    '06_11_MQ4',
+                    'B_02', 'B_05',
                     "Run1_M", 
-                    # "Run21_M", "Run24_M", "Run25_M", "Run26_M", "Run33_M", "Run35_M", 
+                    "Run21_M", "Run24_M", "Run25_M", "Run26_M", "Run33_M", "Run35_M", 
                     ] # 현대차 부싱 이름들
         
         exclude_key4 = ['Run92', 'Run89', 'Run88', 'Run154', 'Run83', 'Run128', 'Run81', 'Run37',
@@ -234,13 +234,22 @@ if __name__ == "__main__" :
         exclude_keys = list(set(exclude_key4))
         
         # 학습진행
+        # result_dict_list = []
         # for test_key in test_keys:
         #     dataset = IntegrateDataset(output_path=data_path, test_key=test_key, exclude_keys=exclude_keys)
         #     train_model(args.model_type, dataset, args.n_epochs, args.batch_size, args.lr, test_key=test_key, save_path=result_path)
+            
+        #     # 모델테스트까지 함께
+        #     result_dict = model_test(args.model_type, dataset=dataset, test_key=test_key, model_path=rf'{result_path}/{test_key}')
+        #     result_dict_list.append(result_dict)
+            
+        #     pd.DataFrame(result_dict_list).to_csv(os.path.join(result_path, "test_result.csv"), index=False)
+        # mean_wmape = np.mean([result["Mean WMAPE"] for result in result_dict_list])
+        # mean_std_row = pd.DataFrame({"Test Key": "Mean", "Mean WMAPE": mean_wmape}, index=[0])
+        # pd.concat([pd.DataFrame(result_dict_list), mean_std_row], ignore_index=True).to_csv(os.path.join(result_path, "test_result.csv"), index=False)
         
     # 테스트 진행
-    model_path = rf'./results/중철_검토/20250519_171411_SHCNN_70'
-    # model_path = result_path
+    model_path = rf'./results/중철_검토/20250520_001030_SHCNN_70'
     
     result_dict_list = []
     for test_key in test_keys:

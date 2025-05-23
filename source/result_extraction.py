@@ -1,5 +1,7 @@
 import os
 import matplotlib.pyplot as plt
+import pyvista as pv
+import numpy as np
 from source.polynomial_reg import *
 from source import calculate_wmape
 __all__ = ['results_extraction'] 
@@ -20,8 +22,10 @@ def results_extraction(input_data_unscaled, prediction, gt_output, pred_percenta
     optimal_degree = loocv_optimization(train_X, prediction[:,:].flatten())
     poly_model, poly = polynomial_regression(train_X, prediction[:,:].flatten(), optimal_degree)
 
-    # Z_pred = predict_on_grid(poly_model, poly, train_X)
-    Z_pred = prediction
+    Z_pred_original = prediction
+    Z_pred_original = Z_pred_original.reshape(31, 31)
+    
+    Z_pred = predict_on_grid(poly_model, poly, train_X)
     Z_pred = Z_pred.reshape(31, 31)
     gt_output = gt_output.reshape(31, 31)   
     
@@ -47,6 +51,18 @@ def results_extraction(input_data_unscaled, prediction, gt_output, pred_percenta
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         # ax.plot_surface(grid_x, grid_y, gt_output, color='blue', alpha=0.5, label='Ground_Truth[100%]')
+        ax.plot_surface(grid_x, grid_y, Z_pred_original, color='red', alpha=0.5, label='Predicton[100%]')
+        ax.set_xlabel('SubAxes')
+        ax.set_ylabel('MainAxes')
+        ax.set_zlabel('Value')
+        # plt.legend()
+        img_path = os.path.join(save_path, f'Prediction_original.png')
+        plt.savefig(img_path, dpi=300)
+        print(f"Saved: {img_path}")
+        
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        # ax.plot_surface(grid_x, grid_y, gt_output, color='blue', alpha=0.5, label='Ground_Truth[100%]')
         ax.plot_surface(grid_x, grid_y, Z_pred, color='red', alpha=0.5, label='Predicton[100%]')
         ax.set_xlabel('SubAxes')
         ax.set_ylabel('MainAxes')
@@ -55,6 +71,19 @@ def results_extraction(input_data_unscaled, prediction, gt_output, pred_percenta
         img_path = os.path.join(save_path, f'Prediction.png')
         plt.savefig(img_path, dpi=300)
         print(f"Saved: {img_path}")
+        
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_surface(grid_x, grid_y, gt_output, color='blue', alpha=0.5, label='Ground_Truth[100%]')
+        ax.plot_surface(grid_x, grid_y, Z_pred, color='red', alpha=0.5, label='Predicton[100%]')
+        ax.set_xlabel('SubAxes')
+        ax.set_ylabel('MainAxes')
+        ax.set_zlabel('Value')
+        # plt.legend()
+        img_path = os.path.join(save_path, f'Both.png')
+        plt.savefig(img_path, dpi=300)
+        print(f"Saved: {img_path}")
+
         
         wmape_per_percent = calculate_wmape(gt_output[:int(31*pred_percentage),:int(31*pred_percentage)], Z_pred[:int(31*pred_percentage),:int(31*pred_percentage)])
         wmape_full_range = calculate_wmape(gt_output, Z_pred)

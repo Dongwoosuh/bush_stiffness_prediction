@@ -147,7 +147,7 @@ class SHCNN_(BaseMLP):
         num_DV: int = 17,
         dropout_rate: float = 0.1,
         BN_momentum: float = 0.1,
-        start_ch: int = 2048,
+        start_ch: int = 512,
         embedding_dim1: int = 512,
         embedding_dim2: int = 512,
         activation: str = "ELU",
@@ -155,7 +155,7 @@ class SHCNN_(BaseMLP):
         super(SHCNN_,self).__init__()
 
         # ────────────── 입력 임베딩 ──────────────
-        seg1_dim, seg2_dim = 14, 1
+        seg1_dim, seg2_dim, seg3_dim, seg4_dim = 7, 2, 5, 1
         act = self.get_activation(activation)
         self.start_ch = start_ch
         self.dropout_rate = dropout_rate
@@ -176,6 +176,8 @@ class SHCNN_(BaseMLP):
 
         self.embed1 = _embed(seg1_dim, self.embed1_dim1)
         self.embed2 = _embed(seg2_dim, self.embed2_dim2)
+        self.embed3 = _embed(seg3_dim, self.embed1_dim1)  # 추가 임베딩 레이어 (예시로 사용)
+        self.embed4 = _embed(seg4_dim, self.embed2_dim2)  # 추가 임베딩 레이어 (예시로 사용)
 
         embed_total = self.embed1_dim1 + self.embed2_dim2
 
@@ -210,13 +212,23 @@ class SHCNN_(BaseMLP):
         # ────────────── 최종 1-채널 투영 ──────────────
         self.to_out = nn.Conv2d(self.start_ch // 16, 1, kernel_size=3, stride=1, padding=1)
 
+
+
     # ────────────── Forward ──────────────
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        seg1, seg2 = x[:, :14], x[:, 14:]
+        seg1, seg2, seg3, seg4 = x[:, :7], x[:, 7:9], x[:, 9:14], x[:, 14:]
 
         emb1 = self.embed1(seg1)
         emb2 = self.embed2(seg2)
-        latent = torch.cat([emb1, emb2], dim=1)          # (B, embed_total)
+        emb3 = self.embed3(seg3)
+        emb4 = self.embed4(seg4)
+        
+        # Method 1
+        latent = emb1 + emb2 + emb3
+        latent = torch.cat([latent, emb4], dim=1)
+        
+        # Method 2
+        # latent = torch.cat([emb1, emb2, emb3, emb4], dim=1)  # (B, 512+512+512+512=2048)
 
         latent = self.fc(latent).view(-1, self.start_ch, 2, 2)    # (B, 2048, 2, 2)
 
