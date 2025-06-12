@@ -471,108 +471,112 @@ class BaseMLP(nn.Module):
 class SHCNN_(BaseMLP):
     def __init__(self, 
                 num_DV=17,
-                dropout_rate=0.3, 
+                dropout_rate_fc=0.1, 
+                dropout_rate_cnn=0.1,
                 BN_momentum = 0.1,
                 start_ch = 2048,
                 embedding_dim1=1024,
                 embedding_dim2=1024,
-                activation='ELU'
+                # embedding_dim3=128,
+                activation='SiLU'
                 ):
         super(SHCNN_, self).__init__()
 
-
-        BN_momentum = 0.1
-        dropout_rate = 0.3
-        dropout_rate_MLP = 0.3
-
-        self.start_ch = 2048 
         self.padding_param = 0
         self.kernel_size = 3
         self.stride = 1
-        self.embdding_dim =1024
-
+        self.embedding_dim1 = embedding_dim1
+        self.embedding_dim2 = embedding_dim2
+        self.start_ch = start_ch 
+        self.dropout_rate_fc = dropout_rate_fc
+        self.dropout_rate_cnn = dropout_rate_cnn
+        self.BN_momentum = BN_momentum
+        
         seg1_dim = 8
         seg2_dim = 6
 
         self.embed1 = nn.Sequential(
-            nn.Linear(seg1_dim, self.embdding_dim),
-            nn.BatchNorm1d(self.embdding_dim, momentum=BN_momentum),
-            nn.ELU(inplace=True),
-            nn.Linear(self.embdding_dim, self.embdding_dim),
+            nn.Linear(seg1_dim, self.embedding_dim1),
+            nn.BatchNorm1d(self.embedding_dim1, momentum=self.BN_momentum),
+            self.get_activation(activation),
+            nn.Linear(self.embedding_dim1, self.embedding_dim1),
+            # nn.SiLU(inplace=True),
+            # nn.Dropout(dropout_rate)
         )
-
         self.embed2 = nn.Sequential(
-            nn.Linear(seg2_dim, self.embdding_dim),
-            nn.BatchNorm1d(self.embdding_dim, momentum=BN_momentum),
-            nn.ELU(inplace=True),
-            nn.Linear(self.embdding_dim, self.embdding_dim),
+            nn.Linear(seg2_dim, self.embedding_dim2),
+            nn.BatchNorm1d(self.embedding_dim2, momentum=self.BN_momentum),
+            self.get_activation(activation),
+            nn.Linear(self.embedding_dim2, self.embedding_dim2),
+            # nn.Dropout(dropout_rate)
         )
 
-        embed_total_dim =  self.embdding_dim * 2
+        embed_total_dim =  self.embedding_dim1 + self.embedding_dim2
 
         self.fc = nn.Sequential(
             nn.Linear(in_features=embed_total_dim, out_features=self.start_ch * 2 * 2),
-            nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.Linear(self.start_ch * 2 * 2, self.start_ch * 2 * 2),
-            nn.Dropout(dropout_rate_MLP)
+            nn.Dropout(self.dropout_rate_fc)
+            
         )
 
         self.conv5 = nn.Sequential(
             nn.ConvTranspose2d(self.start_ch, self.start_ch // 2, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 2, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 2, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 2, kernel_size=self.kernel_size, 
-                                 stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 2, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+                                 stride= self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 2, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 4, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 4, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 4, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 4, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 4, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 4, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 8, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 8, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 8, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 8, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
-            nn.BatchNorm2d(self.start_ch // 8, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 8, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 16, kernel_size=3, 
                                  stride=self.stride, padding=0),
-            nn.BatchNorm2d(self.start_ch // 16, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 16, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 16, kernel_size=3, 
                                  stride=self.stride, padding=0),
-            nn.BatchNorm2d(self.start_ch // 16, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 16, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 32, kernel_size=3, 
                                  stride=self.stride, padding=0),
-            nn.BatchNorm2d(self.start_ch // 32, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 32, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.ConvTranspose2d(self.start_ch // 32, self.start_ch // 32, kernel_size=3, 
                                  stride=self.stride, padding=0),
-            nn.BatchNorm2d(self.start_ch // 32, momentum=BN_momentum),
-            nn.ELU(inplace=True),
+            nn.BatchNorm2d(self.start_ch // 32, momentum=self.BN_momentum),
+            self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=1,count_include_pad=False),
-            nn.Dropout2d(dropout_rate),     
+            nn.Dropout2d(self.dropout_rate_cnn),
         )
 
         self.conv_last = nn.Sequential(
@@ -585,18 +589,21 @@ class SHCNN_(BaseMLP):
 
         seg1 = input[:, :8]      
         seg2 = input[:, 8:14]      
+        # seg3 = input[:, 14:]   
 
         emb1 = self.embed1(seg1)   
         emb2 = self.embed2(seg2)   
+        # emb3 = self.embed3(seg3)
 
         x_embed = torch.cat([emb1, emb2], dim=1)  
 
+        # x_embed = emb1 + emb2 + emb3
         x = self.fc(x_embed)  
         x = x.view(-1, self.start_ch, 2, 2)
         x = self.conv5(x)
         x = self.conv_last(x).view(-1, 6, 16, 16)
-        
         return x
+    
     
     
 class SHCNN():
@@ -605,17 +612,20 @@ class SHCNN():
         device: str,
         num_DV: int,
         BN_momentum: float,
-        dropout_rate: float,
+        dropout_rate_fc: float, 
+        dropout_rate_cnn: float,
         start_ch: int,
         embedding_dim1: int,
         embedding_dim2: int,
-        activation: str = "ELU",
+        activation: str = "SiLU",
     ):
         self.device = device
+        
         self.hparams = {
             "num_DV": num_DV,
             "BN_momentum": BN_momentum,
-            "dropout_rate": dropout_rate,
+            "dropout_rate_fc": dropout_rate_fc,
+            "dropout_rate_cnn": dropout_rate_cnn,
             "start_ch": start_ch,
             "embedding_dim1": embedding_dim1,
             "embedding_dim2": embedding_dim2,
@@ -641,21 +651,22 @@ class SHCNN():
             outputs = outputs.detach().cpu().numpy()
             
             outputs_flat = outputs.reshape(-1, 6*16*16)
+            # output_scaler = self.output_scaler[int(input_unscaled[:, -3])-1]
             outputs_flat = self.output_scaler.inverse_transform(outputs_flat)
             
             outputs = outputs_flat.reshape(outputs.shape)
         
         return outputs
-            
+    
     @classmethod
     def load(cls, path, device):
         hparams = json.load(open(os.path.join(path, "hparams.json"), "r"))
         model = cls(**hparams, device=device)
-        model.model.load_state_dict(torch.load(os.path.join(path, "model.pth"), map_location=device))        
-        model.input_scaler_shape = torch.load(os.path.join(path, "input_scaler_shape.pth"))
-        model.input_scaler_linear = torch.load(os.path.join(path, "input_scaler_linear.pth"))
-        model.output_scaler = torch.load(os.path.join(path, "output_scaler.pth"))
-
+        model.model.load_state_dict(torch.load(os.path.join(path, "model.pth"), map_location=device))
+        model.input_scaler_shape = torch.load(os.path.join(path, "input_scaler_shape.pth"), weights_only=False)
+        model.input_scaler_linear = torch.load(os.path.join(path, "input_scaler_linear.pth"), weights_only=False)
+        model.output_scaler = torch.load(os.path.join(path, "output_scalers.pth"), weights_only=False)
+        
         return model
 ##########################################
 
