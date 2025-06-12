@@ -171,3 +171,8 @@ cython_debug/
 .pypirc
 
 results/
+
+*.pth
+*.json
+
+packing/GUI_final/Output_AI/

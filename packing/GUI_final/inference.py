@@ -1,0 +1,758 @@
+import warnings
+warnings.filterwarnings('ignore')
+
+import os
+import sys
+import argparse
+import logging
+import json
+import torch
+import pandas as pd
+import numpy as np
+import math
+import torch
+import torch.nn as nn
+from sklearn.model_selection import LeaveOneOut
+from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from torch.utils.data import DataLoader, Dataset
+import matplotlib.pyplot as plt
+
+def linear_stiffness_extaraction_each(df, main_axes_inverse):
+    slope_list = []
+    slope_list2 = []
+    slope_gap_list = []
+
+    ## change (N/mm, N-mm/deg) to (kgf/mm, kgf-cm/deg)
+    df_x = np.linspace(0, main_axes_inverse, len(df))
+    for j in range(int(len(df))):
+        if j == 0 or j == len(df) -1:
+            slope_list.append(0)
+            slope_list2.append(0)
+            slope_gap_list.append(0)
+        else :
+            slope = df[j] / df_x[j] # axis 값과 Force_or_Moment 값의 비율 계산 (데이터 위치에 따라 달라질 수 있음)
+            slope2 = (df[j+1]- df[j-1]) / (df_x[j+1]- df_x[j-1])
+            slope_gap = slope2/slope
+            slope_list.append(slope)
+            slope_list2.append(slope2)
+            slope_gap_list.append(slope_gap)
+
+    # slope_gap_list에서 1에 가장 가까운 값의 index를 찾아 해당 index의 변환된 slope_list 값을 반환
+    if slope_gap_list:
+        min_gap_index = min(range(len(slope_gap_list)), key=lambda i: abs(slope_gap_list[i] - 1))
+        linear_stiffness = slope_list[min_gap_index]
+    else:
+        linear_stiffness = None
+
+    return linear_stiffness
+
+###### Dataloader ######
+class BushDataset(Dataset):
+    """
+    부시별 input, output을 Dataset으로 감싸는 예시
+    """
+    def __init__(self, inputs):
+        super().__init__()
+        self.inputs = inputs  # shape: (N, feature_dim) 또는 object
+        
+    def __len__(self):
+        return len(self.inputs)
+
+    def __getitem__(self, idx):
+        x = self.inputs[idx]
+
+        return x
+    
+class InferenceVEPDataset():
+    def __init__(self, csv_path: str):
+        
+        # Load CSV data
+        df = pd.read_csv(csv_path)
+
+        shape_cols = ['Inner_radius', 'Thickness', 'Outer_height', 'Gap',
+                      'Control_point_x', 'Control_point_y', 'Inner_wavy_depth', 'Inner_wavy_height']
+        linear_cols_1_3 = ['linear_stiffness_1', 'linear_stiffness_2', 'linear_stiffness_3']
+        linear_cols_4_6 = ['linear_stiffness_4', 'linear_stiffness_5', 'linear_stiffness_6']
+        
+        all_required_cols = shape_cols + linear_cols_1_3 + linear_cols_4_6
+
+        missing_cols = [col for col in all_required_cols if col not in df.columns or df[col].isnull().any()]
+        if missing_cols:
+            raise ValueError("Inputs are missing")
+
+        input_data_shape = df[shape_cols].values.astype(np.float32)
+
+        linear_1_3 = df[linear_cols_1_3].values.astype(np.float32) * 9.806650
+        linear_4_6 = df[linear_cols_4_6].values.astype(np.float32) * 5622.786320
+        input_data_linear = np.hstack((linear_1_3, linear_4_6))
+
+        # Combine into a single numpy array
+        input_data = np.hstack((input_data_shape, input_data_linear))
+        inference_name = csv_path.split('/')[-1].split('.')[0]  # Extract name before .csv
+        
+        self.input_data = input_data
+        self.inference_name = inference_name
+###############################################
+
+
+##### POLY REGRESSION #####
+def predict_on_grid(model, poly, grid_points):
+    """
+    Predict using the polynomial regression model on the grid points.
+    Args:
+        model: Trained LinearRegression model.
+        poly: PolynomialFeatures instance.
+        grid_points: Grid points (2D numpy array).
+    Returns:
+        Predicted values on the grid.
+    """
+    grid_points_poly = poly.transform(grid_points)  # Expand grid points to polynomial terms
+    return model.predict(grid_points_poly)
+
+def polynomial_regression(X, Z, degree, prev_model=None, prev_poly=None):
+
+    poly = PolynomialFeatures(degree)
+    X_poly = poly.fit_transform(X)  
+
+    model = LinearRegression(positive=True, fit_intercept=False)
+
+    eps = 1.0
+    
+    y_pos = X[:, 1]
+    weights = np.exp(-eps * y_pos / (np.max(y_pos) + 1e-6))
+
+    try:
+        model.fit(X_poly, Z, sample_weight=weights / (Z + eps))
+
+    except RuntimeError as e:
+        if prev_model is not None and prev_poly is not None:
+            return prev_model, prev_poly
+        else:
+            raise RuntimeError("No previous model available to fallback.")
+    return model, poly
+
+def loocv_optimization(X, Z, max_degree=6):
+
+    from sklearn.exceptions import ConvergenceWarning
+    import warnings
+    warnings.filterwarnings("ignore", category=ConvergenceWarning)
+
+    loo = LeaveOneOut()
+    errors = []
+    valid_degrees = []
+
+    for degree in range(2, max_degree + 1):
+        try:
+            mse_list = []
+            for train_index, test_index in loo.split(X):
+                X_train, X_test = X[train_index], X[test_index]
+                Z_train, Z_test = Z[train_index], Z[test_index]
+
+                # Train the model
+                model, poly = polynomial_regression(X_train, Z_train, degree)
+                # Predict on the test set
+                Z_pred = predict_on_grid(model, poly, X_test)
+                # Compute the mean squared error
+                mse_list.append(mean_squared_error(Z_test, Z_pred))
+
+            # Average MSE for this degree
+            errors.append(np.mean(mse_list))
+            valid_degrees.append(degree)
+
+        except Exception as e:
+            print(f"Error occurred for degree {degree}: {str(e)}")
+            continue
+
+    if not valid_degrees:
+        raise ValueError("All degrees failed during LOOCV.")
+
+    # Find the degree with the lowest error
+    optimal_degree = valid_degrees[np.argmin(errors)]
+    return optimal_degree
+###################################################################
+
+
+######## Result Extraction #######
+def get_extrapolation_range(stiffness_value_to_train, df):
+
+    if isinstance(stiffness_value_to_train, str) and stiffness_value_to_train.startswith("Stiffness_"):
+        stiffness_value_to_train = stiffness_value_to_train.split("_")[-1]
+    else:
+        stiffness_value_to_train = str(stiffness_value_to_train)  # 문자열로 변환
+
+    scale_factor = 1.0487
+    # Calculate rubber parameters
+    D_O_RUBBER = 2 * (df[0] + df[1])
+    D_I_RUBBER = 2 * df[0]
+    L_O_RUBBER = 2 * df[2]
+    L_I_RUBBER = 2 * (df[2] + df[3])
+
+    # Calculate displacements and angles
+    x_disp = np.where(df[6]<= 0,
+                  (D_O_RUBBER - D_I_RUBBER) / 2,
+                  (D_O_RUBBER - D_I_RUBBER) / 2 - df[6])
+    z_disp = (L_I_RUBBER*scale_factor - L_O_RUBBER) / 2
+    # theta_x = np.degrees(np.arctan(D_O_RUBBER / L_O_RUBBER) - np.arcsin(D_I_RUBBER / np.sqrt(D_O_RUBBER**2 + L_O_RUBBER**2)))
+    theta_x = (np.arctan(D_O_RUBBER / L_O_RUBBER) - np.arcsin(D_I_RUBBER / np.sqrt(D_O_RUBBER**2 + L_O_RUBBER**2)))
+
+    if stiffness_value_to_train in ["1", "2"]:
+        subAxes = theta_x
+        mainAxes= x_disp
+    elif stiffness_value_to_train in ["3"]:
+        subAxes = theta_x
+        mainAxes= z_disp
+    elif stiffness_value_to_train in ["4", "5"]:
+        subAxes = z_disp
+        mainAxes= theta_x
+    elif stiffness_value_to_train in ["6"]:
+        subAxes = z_disp
+        # mainAxes= 1.5708 # 90 degree
+        mainAxes = 0.2617993877991494 # 15 degree
+
+    return subAxes, mainAxes
+
+
+def inference_results_extraction(input_data_unscaled, prediction, stiffness_num, save_path:str, linear_scaling=False, extrapolation_values=None):
+    
+    if extrapolation_values is not None:
+        if len(extrapolation_values) != 5:
+            raise ValueError("Extrapolation values must be a list of 5 numbers: [d1, d2, d3, a1, a2]")
+        d1, d2, d3, a1, a2 = map(float, extrapolation_values)
+
+        a1 = math.radians(a1)
+        a2 = math.radians(a2)
+
+    prev_model, prev_poly = None, None
+
+    subAxes, mainAxes = get_extrapolation_range(stiffness_num, input_data_unscaled[0,:8])
+    grid_x, grid_y = np.meshgrid(np.linspace(0, subAxes*0.7, 16),
+                                np.linspace(0, mainAxes*0.7, 16))
+    
+    if extrapolation_values is not None:
+        if stiffness_num in [1]:
+            grid_x1, grid_y1 = np.meshgrid(np.linspace(0, a2, 25),
+                                        np.linspace(0, d1, 25))
+            linear_scaling_max = d1 
+
+        elif stiffness_num in [2]:
+            grid_x1, grid_y1 = np.meshgrid(np.linspace(0, a2, 25),
+                                        np.linspace(0, d2, 25))
+            linear_scaling_max = d2
+
+        elif stiffness_num in [3]:
+            grid_x1, grid_y1 = np.meshgrid(np.linspace(0, a2, 25),
+                                        np.linspace(0, d3, 25))    
+            linear_scaling_max = d3
+
+        elif stiffness_num in [4]:
+            grid_x1, grid_y1 = np.meshgrid(np.linspace(0, d3, 25),
+                                        np.linspace(0, a1, 25))    
+            linear_scaling_max = a1
+
+        elif stiffness_num in [5]:
+            grid_x1, grid_y1 = np.meshgrid(np.linspace(0, d3, 25),
+                                        np.linspace(0, a2, 25)) 
+            linear_scaling_max = a2
+
+        else:
+            deg_100 = abs(round(math.radians(100), 6))
+            grid_x1, grid_y1 = np.meshgrid(np.linspace(0, d3, 25),
+                                        np.linspace(0, deg_100, 25))
+            linear_scaling_max = deg_100
+
+    else:
+        if stiffness_num in [1, 2, 3, 4, 5]:
+            grid_x1, grid_y1 = np.meshgrid(np.linspace(0, subAxes, 25),
+                                        np.linspace(0, mainAxes, 25))
+            linear_scaling_max = mainAxes
+
+        else:
+            deg_100 = abs(round(math.radians(100), 6))
+            grid_x1, grid_y1 = np.meshgrid(np.linspace(0, subAxes, 25),
+                                        np.linspace(0, deg_100, 25))
+            linear_scaling_max = deg_100
+
+
+    train_X = np.column_stack([grid_x.ravel(), grid_y.ravel()])
+    train_X1 = np.column_stack([grid_x1.ravel(), grid_y1.ravel()])
+    
+    optimal_degree = loocv_optimization(train_X, prediction[:,:].flatten())
+
+    iterations =50
+    for iteration in range(iterations):
+
+        try:
+            poly_model, poly = polynomial_regression(train_X, prediction[:,:].flatten(), optimal_degree, prev_model, prev_poly)
+            prev_model, prev_poly = poly_model, poly  # Update the previous model
+        except RuntimeError:
+            continue
+
+
+        z_pred = predict_on_grid(poly_model, poly, train_X)
+        y_zero_indices = np.where(train_X[:, 1] == 0)
+        z_pred[y_zero_indices] = 0
+
+        prediction[:,:] = z_pred.reshape(16,16)
+
+    Z_pred = predict_on_grid(poly_model, poly, train_X1)
+    Z_pred = Z_pred.reshape(25, 25)
+    y_zero_indices_final = np.where(grid_y1 == 0)
+    Z_pred[y_zero_indices_final] = 0
+
+    if linear_scaling:
+            
+        linear_stiff = linear_stiffness_extaraction_each(Z_pred[:, 0], linear_scaling_max)
+        linear_stiff_target = input_data_unscaled[0, 7+ stiffness_num]
+
+        scaling_factor = linear_stiff_target/linear_stiff
+        Z_pred = scaling_factor * Z_pred
+
+    # grid_x1, grid_y1, Z_pred를 1차원 배열로 펼침 (총 625개 점)
+    grid_x1_flat = grid_x1.ravel()
+    grid_y1_flat = grid_y1.ravel()
+    Z_pred_flat = Z_pred.ravel()
+    
+    grid_x1_flat_sym = -grid_x1_flat
+    grid_y1_flat_sym = grid_y1_flat
+    Z_pred_flat_sym = Z_pred_flat
+    # Concatenate original and symmetric points
+    grid_x2 = np.concatenate((grid_x1_flat, grid_x1_flat_sym))
+    grid_y2 = np.concatenate((grid_y1_flat, grid_y1_flat_sym))
+    Z_pred2 = np.concatenate((Z_pred_flat, Z_pred_flat_sym))
+
+    # Remove duplicate (x, y) points, keeping the first occurrence
+    coords = np.column_stack((grid_x2, grid_y2))
+    _, unique_indices = np.unique(coords, axis=0, return_index=True)
+    unique_indices_sorted = np.sort(unique_indices)  # Keep order of first appearance
+
+    grid_x2 = grid_x2[unique_indices_sorted]
+    grid_y2 = grid_y2[unique_indices_sorted]
+    Z_pred2 = Z_pred2[unique_indices_sorted]
+    
+    grid_x2_sym = grid_x2
+    grid_y2_sym = -grid_y2
+    Z_pred2_sym = -Z_pred2
+    
+    grid_x3 = np.concatenate((grid_x2, grid_x2_sym))
+    grid_y3 = np.concatenate((grid_y2, grid_y2_sym))
+    Z_pred3 = np.concatenate((Z_pred2, Z_pred2_sym))
+
+    block_height = Z_pred3.max() * 100.0
+
+    if stiffness_num in [1, 2, 3]:
+        y_col = 1  # MainAxis = Y
+
+        points = np.column_stack((Z_pred3, grid_y3, grid_x3))
+        rounded_points = np.round(points, decimals=8)
+        _, unique_indices = np.unique(rounded_points, axis=0, return_index=True)
+        points_unique = points[sorted(unique_indices)]  # 원래 값에서 추출
+
+        sorted_indices = np.lexsort((points_unique[:, 1], points_unique[:, 2]))  # (X 기준, Y 기준)
+        points_sorted = points_unique[sorted_indices]
+
+        # Plot the symmetric surface
+        fig_sym = plt.figure()
+        ax_sym = fig_sym.add_subplot(111, projection='3d')
+        ax_sym.scatter(points_sorted[:, 2],  # X
+                    points_sorted[:, 1],  # Y
+                    points_sorted[:, 0],  # Z
+                    c=points_sorted[:, 0], cmap='viridis', alpha=0.7)
+        ax_sym.set_xlabel('SubAxis')
+        ax_sym.set_ylabel('MainAxis')
+        ax_sym.set_zlabel('RF')
+        img_path_sym = os.path.join(save_path, f'Stiffness_Surface.png')
+        plt.savefig(img_path_sym, dpi=300)
+        plt.close(fig_sym)
+        # print(f"Saved: {img_path_sym}")
+
+        ## set block height
+        unique_y = np.unique(points_sorted[:, y_col])
+        max_y, min_y = unique_y.max(), unique_y.min()
+
+        for i in range(len(points_sorted)):
+            y_val = points_sorted[i, y_col]
+            if np.isclose(y_val, max_y, atol=1e-8):
+                points_sorted[i, 0] = block_height  # Y 최댓값 → +블록
+            elif np.isclose(y_val, min_y, atol=1e-8):
+                points_sorted[i, 0] = -block_height  # Y 최솟값 → -블록
+
+        # Save as TXT
+        output_txt_path_sym = os.path.join(save_path, f'Stiffness_Surface.txt')
+        with open(output_txt_path_sym, 'w') as f:
+            for row in points_sorted:
+                f.write(f"{row[0]},{row[1]},{row[2]}\n")
+        # print(f"Saved TXT: {output_txt_path_sym}")
+
+        output_txt_path_sym_1D = os.path.join(save_path, f'Stiffness_Surface_1D.txt')
+        with open(output_txt_path_sym_1D, 'w') as f:
+            for row in points_sorted:
+                if np.isclose(row[2], 0.0, atol=1e-8):
+                    f.write(f"{row[0]},{row[1]}\n")
+        # print(f"Saved TXT: {output_txt_path_sym_1D}")
+
+
+
+    elif stiffness_num in [4, 5, 6]:
+        y_col = 2  # MainAxis = Y (위치 바뀜)
+
+        points = np.column_stack((Z_pred3, grid_x3, grid_y3))
+        rounded_points = np.round(points, decimals=8)
+        _, unique_indices = np.unique(rounded_points, axis=0, return_index=True)
+        points_unique = points[sorted(unique_indices)]  # 원래 값에서 추출
+        sorted_indices = np.lexsort((points_unique[:, 1], points_unique[:, 2]))  # (X 기준, Y 기준)
+        points_sorted = points_unique[sorted_indices]
+
+        # Plot the symmetric surface
+        fig_sym = plt.figure()
+        ax_sym = fig_sym.add_subplot(111, projection='3d')
+        ax_sym.scatter(points_sorted[:, 1],  # X
+                    points_sorted[:, 2],  # Y
+                    points_sorted[:, 0],  # Z
+                    c=points_sorted[:, 0], cmap='viridis', alpha=0.7)
+        ax_sym.set_xlabel('SubAxis')
+        ax_sym.set_ylabel('MainAxis')
+        ax_sym.set_zlabel('RM')
+        img_path_sym = os.path.join(save_path, f'Stiffness_Surface.png')
+        plt.savefig(img_path_sym, dpi=300)
+        plt.close(fig_sym)
+        # print(f"Saved: {img_path_sym}")
+
+
+        ## set block height
+        unique_y = np.unique(points_sorted[:, y_col])
+        max_y, min_y = unique_y.max(), unique_y.min()
+
+        for i in range(len(points_sorted)):
+            y_val = points_sorted[i, y_col]
+            if np.isclose(y_val, max_y, atol=1e-8):
+                points_sorted[i, 0] = block_height  # Y 최댓값 → +블록
+            elif np.isclose(y_val, min_y, atol=1e-8):
+                points_sorted[i, 0] = -block_height  # Y 최솟값 → -블록
+
+        # Save as TXT
+        output_txt_path_sym = os.path.join(save_path, f'Stiffness_Surface.txt')
+        with open(output_txt_path_sym, 'w') as f:
+            for row in points_sorted:
+                f.write(f"{row[0]},{row[1]},{row[2]}\n")
+        # print(f"Saved TXT: {output_txt_path_sym}")
+        
+        output_txt_path_sym_1D = os.path.join(save_path, f'Stiffness_Surface_1D.txt')
+        with open(output_txt_path_sym_1D, 'w') as f:
+            for row in points_sorted:
+                if np.isclose(row[1], 0.0, atol=1e-8):
+                    f.write(f"{row[0]},{row[2]}\n")
+        # print(f"Saved TXT: {output_txt_path_sym_1D}")
+#############################################
+
+########## Model Definition ##########
+class BaseMLP(nn.Module):
+    def __init__(self):
+        super(BaseMLP, self).__init__()
+
+    def get_activation(self, name):
+        activations = {
+            "SiLU": nn.SiLU(),
+            "Sigmoid": nn.Sigmoid(),
+            "Tanh": nn.Tanh(),
+            "ELU": nn.ELU(),
+            "LeakyReLU": nn.LeakyReLU(),
+            # "Mish": nn.Mish(),
+            "SeLU": nn.SELU(),
+            "ReLU": nn.ReLU(),
+            "ReLU6": nn.ReLU6(),
+            "None": nn.Identity(),
+        }
+        if name in activations:
+            return activations[name]
+        raise ValueError(f"Invalid activation: {name}")
+    
+class SHCNN_(BaseMLP):
+    def __init__(self, 
+                num_DV=17,
+                dropout_rate=0.3, 
+                BN_momentum = 0.1,
+                start_ch = 2048,
+                embedding_dim1=1024,
+                embedding_dim2=1024,
+                activation='ELU'
+                ):
+        super(SHCNN_, self).__init__()
+
+
+        BN_momentum = 0.1
+        dropout_rate = 0.3
+        dropout_rate_MLP = 0.3
+
+        self.start_ch = 2048 
+        self.padding_param = 0
+        self.kernel_size = 3
+        self.stride = 1
+        self.embdding_dim =1024
+
+        seg1_dim = 8
+        seg2_dim = 6
+
+        self.embed1 = nn.Sequential(
+            nn.Linear(seg1_dim, self.embdding_dim),
+            nn.BatchNorm1d(self.embdding_dim, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.Linear(self.embdding_dim, self.embdding_dim),
+        )
+
+        self.embed2 = nn.Sequential(
+            nn.Linear(seg2_dim, self.embdding_dim),
+            nn.BatchNorm1d(self.embdding_dim, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.Linear(self.embdding_dim, self.embdding_dim),
+        )
+
+        embed_total_dim =  self.embdding_dim * 2
+
+        self.fc = nn.Sequential(
+            nn.Linear(in_features=embed_total_dim, out_features=self.start_ch * 2 * 2),
+            nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.Linear(self.start_ch * 2 * 2, self.start_ch * 2 * 2),
+            nn.Dropout(dropout_rate_MLP)
+        )
+
+        self.conv5 = nn.Sequential(
+            nn.ConvTranspose2d(self.start_ch, self.start_ch // 2, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 2, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 2, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 2, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
+            nn.Dropout2d(dropout_rate),
+
+            nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 4, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 4, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 4, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 4, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
+            nn.Dropout2d(dropout_rate),
+
+            nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 8, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 8, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 8, kernel_size=self.kernel_size, 
+                                 stride=self.stride, padding=self.padding_param),
+            nn.BatchNorm2d(self.start_ch // 8, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
+            nn.Dropout2d(dropout_rate),
+
+            nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 16, kernel_size=3, 
+                                 stride=self.stride, padding=0),
+            nn.BatchNorm2d(self.start_ch // 16, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 16, kernel_size=3, 
+                                 stride=self.stride, padding=0),
+            nn.BatchNorm2d(self.start_ch // 16, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
+            nn.Dropout2d(dropout_rate),
+
+            nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 32, kernel_size=3, 
+                                 stride=self.stride, padding=0),
+            nn.BatchNorm2d(self.start_ch // 32, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.ConvTranspose2d(self.start_ch // 32, self.start_ch // 32, kernel_size=3, 
+                                 stride=self.stride, padding=0),
+            nn.BatchNorm2d(self.start_ch // 32, momentum=BN_momentum),
+            nn.ELU(inplace=True),
+            nn.AvgPool2d(3, stride=1, padding=1,count_include_pad=False),
+            nn.Dropout2d(dropout_rate),     
+        )
+
+        self.conv_last = nn.Sequential(
+            nn.ConvTranspose2d(self.start_ch // 32, 6, kernel_size=3, stride=self.stride, padding=0),
+            nn.Flatten(),
+            nn.Linear(in_features=6 * 16 * 16, out_features=6 * 16 * 16),
+        )
+
+    def forward(self, input):
+
+        seg1 = input[:, :8]      
+        seg2 = input[:, 8:14]      
+
+        emb1 = self.embed1(seg1)   
+        emb2 = self.embed2(seg2)   
+
+        x_embed = torch.cat([emb1, emb2], dim=1)  
+
+        x = self.fc(x_embed)  
+        x = x.view(-1, self.start_ch, 2, 2)
+        x = self.conv5(x)
+        x = self.conv_last(x).view(-1, 6, 16, 16)
+        
+        return x
+    
+    
+class SHCNN():
+    def __init__(
+        self,
+        device: str,
+        num_DV: int,
+        BN_momentum: float,
+        dropout_rate: float,
+        start_ch: int,
+        embedding_dim1: int,
+        embedding_dim2: int,
+        activation: str = "ELU",
+    ):
+        self.device = device
+        self.hparams = {
+            "num_DV": num_DV,
+            "BN_momentum": BN_momentum,
+            "dropout_rate": dropout_rate,
+            "start_ch": start_ch,
+            "embedding_dim1": embedding_dim1,
+            "embedding_dim2": embedding_dim2,
+            "activation": activation,
+        }
+        
+        self.model = SHCNN_(**self.hparams).to(device)
+        
+        self.input_scaler_shape = None
+        self.input_scaler_linear = None
+        self.output_scaler = None
+        
+        
+    def forward(self, inputs):
+        outputs = self.model(inputs)
+        return outputs
+    
+    def predict(self, inputs):
+        self.model.eval()
+        with torch.no_grad():
+            inputs = inputs.to(self.device)
+            outputs = self.forward(inputs)
+            outputs = outputs.detach().cpu().numpy()
+            
+            outputs_flat = outputs.reshape(-1, 6*16*16)
+            outputs_flat = self.output_scaler.inverse_transform(outputs_flat)
+            
+            outputs = outputs_flat.reshape(outputs.shape)
+        
+        return outputs
+            
+    @classmethod
+    def load(cls, path, device):
+        hparams = json.load(open(os.path.join(path, "hparams.json"), "r"))
+        model = cls(**hparams, device=device)
+        model.model.load_state_dict(torch.load(os.path.join(path, "model.pth"), map_location=device))        
+        model.input_scaler_shape = torch.load(os.path.join(path, "input_scaler_shape.pth"))
+        model.input_scaler_linear = torch.load(os.path.join(path, "input_scaler_linear.pth"))
+        model.output_scaler = torch.load(os.path.join(path, "output_scaler.pth"))
+
+        return model
+##########################################
+
+logger = logging.getLogger(__name__)
+  
+def model_test(
+    model_type:str,
+    dataset,
+    model_path: str,
+    result_path: str = None,
+    linear_scaling: bool = False,
+    extrapolation_values=None
+    ):
+    
+    device = "cpu"
+        
+    if model_type == "SHCNN":
+        model = SHCNN.load(model_path, device)
+
+    else:
+        raise ValueError(f"Invalid model type: {model_type}")
+    
+    test_key = [dataset.inference_name]
+    
+    input_scaler_shape = model.input_scaler_shape
+    input_scaler_linear = model.input_scaler_linear
+    
+    test_inputs = dataset.input_data
+    test_inputs_unscaled_original = dataset.input_data.copy()
+    test_inputs[:,8:14] = np.log1p(test_inputs[:,8:14])
+
+    test_inputs_shape = input_scaler_shape.transform(test_inputs[:,:8])
+    test_inputs_linear = input_scaler_linear.transform(test_inputs[:,8:14].flatten().reshape(-1,1))
+    test_inputs_linear = test_inputs_linear.reshape(test_inputs[:,8:14].shape)
+    test_inputs = np.hstack((test_inputs_shape, test_inputs_linear))
+    
+    test_dataset = BushDataset(test_inputs)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+        
+    bush_folder_name = f"{test_key[0]}"
+    bush_save_path = os.path.join(result_path, bush_folder_name)
+    os.makedirs(bush_save_path, exist_ok=True)
+
+    for idx, inputs in enumerate(test_loader):
+        prediction = model.predict(inputs)
+        prediction = np.expm1(prediction.reshape(-1,16,16))
+        
+        for idx_ in range(6):
+            stiffness_num = idx_ + 1
+            stiffness_folder  = os.path.join(bush_save_path, f"Stiffness_{stiffness_num}")
+            os.makedirs(stiffness_folder, exist_ok=True)
+
+            # 그 안에 Final_FD 폴더 생성
+            save_path = os.path.join(stiffness_folder, "Final_FD")
+            os.makedirs(save_path, exist_ok=True)
+            
+            inference_results_extraction(test_inputs_unscaled_original, prediction[idx_], 
+                                         stiffness_num=stiffness_num, save_path=save_path, 
+                                         linear_scaling=linear_scaling, extrapolation_values=extrapolation_values)
+
+    print(f"[Parameter Input AI Model] 2D Stiffness Prediction Complete")
+
+def get_base_dir():
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
+              
+# ---------------------- Main Function ----------------------
+def main(csv_path: str, linear_scaling: bool = False, extrapolation_values=None):
+    if not os.path.isfile(csv_path):
+        print(f"Error: CSV file could not be found: {csv_path}")
+        return
+
+    model_type  = "SHCNN"
+    model_path  = os.path.join(os.path.dirname(__file__), "model_param")
+    result_path = os.path.join(get_base_dir(), "Output_AI", "Parameter_AI_Model")
+    os.makedirs(result_path, exist_ok=True)
+
+    dataset = InferenceVEPDataset(csv_path=csv_path)
+    model_test(
+        model_type=model_type,
+        dataset=dataset,
+        model_path=model_path,
+        result_path=result_path,
+        linear_scaling=linear_scaling,
+        extrapolation_values=extrapolation_values)
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--csv_path', required=True)
+    parser.add_argument('--linear_scaling', action='store_true')
+    parser.add_argument('--extrapolation_values', type=float, nargs=5, default=None,
+                        help='Extrapolation values: d1 d2 d3 a1 a2')
+    
+    # parser.add_argument('--csv_path', type=str,default='./Input_AI/06_05_NX4_Bush/06_05_NX4_Bush.csv', help='Path to CSV file')
+
+    args = parser.parse_args()
+    main(args.csv_path, linear_scaling=args.linear_scaling, extrapolation_values=args.extrapolation_values)
