@@ -308,7 +308,8 @@ class BaseMLP(nn.Module):
 class SHCNN_(BaseMLP):
     def __init__(self, 
                 num_DV=17,
-                dropout_rate=0.1, 
+                dropout_rate_fc=0.1, 
+                dropout_rate_cnn=0.1,
                 BN_momentum = 0.1,
                 start_ch = 2048,
                 embedding_dim1=1024,
@@ -324,12 +325,12 @@ class SHCNN_(BaseMLP):
         self.embedding_dim1 = embedding_dim1
         self.embedding_dim2 = embedding_dim2
         self.start_ch = start_ch 
-        self.dropout_rate = dropout_rate
+        self.dropout_rate_fc = dropout_rate_fc
+        self.dropout_rate_cnn = dropout_rate_cnn
         self.BN_momentum = BN_momentum
         
         seg1_dim = 8
         seg2_dim = 6
-        seg3_dim = num_DV - 14
 
         self.embed1 = nn.Sequential(
             nn.Linear(seg1_dim, self.embedding_dim1),
@@ -337,21 +338,15 @@ class SHCNN_(BaseMLP):
             self.get_activation(activation),
             nn.Linear(self.embedding_dim1, self.embedding_dim1),
             # nn.SiLU(inplace=True),
-            nn.Dropout(dropout_rate)
+            # nn.Dropout(dropout_rate)
         )
         self.embed2 = nn.Sequential(
             nn.Linear(seg2_dim, self.embedding_dim2),
             nn.BatchNorm1d(self.embedding_dim2, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.Linear(self.embedding_dim2, self.embedding_dim2),
-            nn.Dropout(dropout_rate)
+            # nn.Dropout(dropout_rate)
         )
-        self.embed3 = nn.Sequential(
-            nn.Linear(seg3_dim, self.embedding_dim1),
-            nn.BatchNorm1d(self.embedding_dim1, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            nn.Dropout(dropout_rate)
-            )
 
         embed_total_dim =  self.embedding_dim1 + self.embedding_dim2
 
@@ -360,7 +355,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.Linear(self.start_ch * 2 * 2, self.start_ch * 2 * 2),
-            nn.Dropout(self.dropout_rate)
+            nn.Dropout(self.dropout_rate_fc)
             
         )
 
@@ -374,7 +369,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 2, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 4, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
@@ -385,7 +380,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 4, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 8, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
@@ -396,7 +391,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 8, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 16, kernel_size=3, 
                                  stride=self.stride, padding=0),
@@ -407,7 +402,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 16, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 32, kernel_size=3, 
                                  stride=self.stride, padding=0),
@@ -418,7 +413,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 32, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=1,count_include_pad=False),
-            nn.Dropout(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
         )
 
         self.conv_last = nn.Sequential(
@@ -454,7 +449,8 @@ class SHCNN():
         device: str,
         num_DV: int,
         BN_momentum: float,
-        dropout_rate: float,
+        dropout_rate_fc: float, 
+        dropout_rate_cnn: float,
         start_ch: int,
         embedding_dim1: int,
         embedding_dim2: int,
@@ -465,7 +461,8 @@ class SHCNN():
         self.hparams = {
             "num_DV": num_DV,
             "BN_momentum": BN_momentum,
-            "dropout_rate": dropout_rate,
+            "dropout_rate_fc": dropout_rate_fc,
+            "dropout_rate_cnn": dropout_rate_cnn,
             "start_ch": start_ch,
             "embedding_dim1": embedding_dim1,
             "embedding_dim2": embedding_dim2,
@@ -588,7 +585,7 @@ def main():
 
     # 3) 테스트 설정
     model_type  = "SHCNN"
-    model_path  = "./model/SHCNN_70_seed_2025_20250508_141201"
+    model_path  = "./model/SHCNN_70_seed_2025_20250612_113150"
     result_path = "./results/Inference"
 
     # 만약 이 역시 인자로 받고 싶다면 위에서 parser에 정의한 args.model_path, args.result_path를 사용하세요.
