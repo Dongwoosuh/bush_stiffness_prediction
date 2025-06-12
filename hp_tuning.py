@@ -67,27 +67,31 @@ def train_model(
 
 def objective(trial):
     
-    lr = trial.suggest_float("lr", 1e-4, 1e-3, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256])
-    BN_momentum = trial.suggest_float("BN_momentum", 0.1, 0.3)
-    dropout_rate = trial.suggest_float("dropout_rate", 0.1, 0.4)
+    lr = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
+    # batch_size = trial.suggest_categorical("batch_size", [32, 64, 128, 256])
+    batch_size = 256
+    BN_momentum = trial.suggest_float("BN_momentum", 0.01, 0.3)
+    dropout_rate_fc = trial.suggest_float("dropout_rate_fc", 0.1, 0.5)
+    dropout_rate_cnn = trial.suggest_float("dropout_rate_cnn", 0.1, 0.5)
     start_ch = trial.suggest_categorical("start_ch", [512, 1024, 2048, 4096])
-    embedding_dim1 = trial.suggest_categorical("embedding_dim1", [128, 256, 512, 1024, 2048])
+    embedding_dim1 = trial.suggest_categorical("embedding_dim1", [512, 1024, 2048])
     embedding_dim2 = embedding_dim1
-    activation = trial.suggest_categorical("activation", ['SiLU', 'ReLU', 'LeakyReLU', 'ELU'])
-    data_path = "./resource/250504/combined_7.npy" # 데이터 경로
+    # activation = trial.suggest_categorical("activation", ['ELU'])
+    activation = 'ELU'  # 현재 ELU만 사용
+    data_path = "./resource/중실_final/combined_7.npy" # 데이터 경로
     
     test_keys = ['06_04_NX4', '06_05_NX4', 'G_05_07_IK', 'G_06_04_IK', 'G_07_05_IK', 'G_08_06_IK', 'G_09_05_IK', 'G_10_03_IK',
                 'G_11_06_IK', 'G_12_05_IK', 'G_13_04_IK', 'G_15_01_IK',  '06_06_LX2', '06_07_KA4', '06_08_US4',
                 '06_11_MQ4', 'B_02', 'B_05'] # 현대차 부싱 이름들
     
-    exclude_key4 = ['Run92', 'Run89', 'Run88', 'Run154', 'Run83', 'Run128', 'Run81', 'Run37',
-                        'Run96', 'Run49', 'Run7',  'Run123',   ## 15 %
-                        'Run101', 'Run72', 'Run75', 'Run164', 'Run191', 'Run149',
-                        'Run166', 'Run28', 'Run138', 'Run62']   ## 20%
+    # # # exclude under 40% 
+    exclude_indices4 = ['Run92', 'Run89', 'Run88', 'Run154', 'Run83', 'Run128', 'Run81', 'Run37',
+                        'Run96', 'Run49', 'Run7',  'Run123',]  ## 15 %
+                        # 'Run101', 'Run119', 'Run72', 'Run75', 'Run164', 'Run191', 'Run149',
+                        # 'Run166', 'Run28', 'Run138', 'Run62']   ## 20%
 
-    
-    exclude_keys = list(set(exclude_key4))
+    exclude_indices6 = ['Run146', 'Run176', 'Run177', 'Run195', 'Run208']
+    exclude_keys = list(set(exclude_indices4+exclude_indices6))
         
 
     # test_key = '06_04_NX4' # 단일 부싱 테스트
@@ -100,13 +104,14 @@ def objective(trial):
         val_loss = train_model(
                             "SHCNN",
                             dataset,
-                            n_epochs=2000, 
+                            n_epochs=3000, 
                             batch_size=batch_size,
                             lr=lr,
                             test_key=test_key,
                             save_path=result_path,
                             BN_momentum=BN_momentum,
-                            dropout_rate=dropout_rate,
+                            dropout_rate_fc=dropout_rate_fc,
+                            dropout_rate_cnn=dropout_rate_cnn,
                             start_ch=start_ch, 
                             embedding_dim1=embedding_dim1,
                             embedding_dim2=embedding_dim2,

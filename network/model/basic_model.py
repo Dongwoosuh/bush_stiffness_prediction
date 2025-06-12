@@ -142,7 +142,8 @@ class CNN_small_dropout(nn.Module):
 class SHCNN_(BaseMLP):
     def __init__(self, 
                 num_DV=17,
-                dropout_rate=0.1, 
+                dropout_rate_fc=0.1, 
+                dropout_rate_cnn=0.1,
                 BN_momentum = 0.1,
                 start_ch = 2048,
                 embedding_dim1=1024,
@@ -158,12 +159,12 @@ class SHCNN_(BaseMLP):
         self.embedding_dim1 = embedding_dim1
         self.embedding_dim2 = embedding_dim2
         self.start_ch = start_ch 
-        self.dropout_rate = dropout_rate
+        self.dropout_rate_fc = dropout_rate_fc
+        self.dropout_rate_cnn = dropout_rate_cnn
         self.BN_momentum = BN_momentum
         
         seg1_dim = 8
         seg2_dim = 6
-        seg3_dim = num_DV - 14
 
         self.embed1 = nn.Sequential(
             nn.Linear(seg1_dim, self.embedding_dim1),
@@ -180,12 +181,6 @@ class SHCNN_(BaseMLP):
             nn.Linear(self.embedding_dim2, self.embedding_dim2),
             # nn.Dropout(dropout_rate)
         )
-        self.embed3 = nn.Sequential(
-            nn.Linear(seg3_dim, self.embedding_dim1),
-            nn.BatchNorm1d(self.embedding_dim1, momentum=self.BN_momentum),
-            self.get_activation(activation),
-            # nn.Dropout(dropout_rate)
-            )
 
         embed_total_dim =  self.embedding_dim1 + self.embedding_dim2
 
@@ -194,7 +189,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm1d(self.start_ch * 2 * 2, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.Linear(self.start_ch * 2 * 2, self.start_ch * 2 * 2),
-            nn.Dropout(self.dropout_rate)
+            nn.Dropout(self.dropout_rate_fc)
             
         )
 
@@ -208,7 +203,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 2, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 2, self.start_ch // 4, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
@@ -219,7 +214,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 4, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 4, self.start_ch // 8, kernel_size=self.kernel_size, 
                                  stride=self.stride, padding=self.padding_param),
@@ -230,7 +225,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 8, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 8, self.start_ch // 16, kernel_size=3, 
                                  stride=self.stride, padding=0),
@@ -241,7 +236,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 16, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=0, count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
 
             nn.ConvTranspose2d(self.start_ch // 16, self.start_ch // 32, kernel_size=3, 
                                  stride=self.stride, padding=0),
@@ -252,7 +247,7 @@ class SHCNN_(BaseMLP):
             nn.BatchNorm2d(self.start_ch // 32, momentum=self.BN_momentum),
             self.get_activation(activation),
             nn.AvgPool2d(3, stride=1, padding=1,count_include_pad=False),
-            nn.Dropout2d(dropout_rate),
+            nn.Dropout2d(self.dropout_rate_cnn),
         )
 
         self.conv_last = nn.Sequential(

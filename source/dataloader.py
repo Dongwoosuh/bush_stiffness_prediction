@@ -100,7 +100,7 @@ class VEPDataset():
         
         # Split train data into train and validation sets
         train_input, val_input, train_output, val_output = train_test_split(
-            self.np_train_input, self.np_train_output, test_size=0.1, random_state=2025
+            self.np_train_input, self.np_train_output, test_size=0.05, random_state=2025
         )
         
         train_input_shape = train_input[:, :8]
